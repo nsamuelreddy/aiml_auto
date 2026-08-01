@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+uploads/
+saved_models/
+trained_models/
+.DS_Store
