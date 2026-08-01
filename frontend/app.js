@@ -1,4 +1,4 @@
-const API_BASE_URL = window.location.origin;
+const API_BASE_URL = "https://aiml-auto.onrender.com";
 let metricsChart;
 let selectedMetric = 'Accuracy';
 let metricOptions = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC-AUC'];
