@@ -1,26 +1,25 @@
-# AutoML Studio
+# Loan Approval Prediction
 
-This workspace now contains:
+## Features
 
-- A FastAPI backend in [backend/main.py](backend/main.py) that uses the existing Python AutoML modules for dataset loading, preprocessing, training, evaluation, and comparison.
-- A static HTML/CSS/JS frontend in [frontend](frontend) with Bootstrap and Chart.js styling.
+## Technologies Used
 
-## Run locally
+## Dataset
 
-### Backend
+## Machine Learning Workflow
 
-```bash
-cd /home/samuel/Documents/AiMlAuto
-/home/samuel/Documents/AiMlAuto/.venv/bin/python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
+## Model Performance
 
-### Frontend
+## Feature Importance
 
-The frontend is now just static files. You can open it through the FastAPI app with:
+## Project Structure
 
-```bash
-cd /home/samuel/Documents/AiMlAuto
-/home/samuel/Documents/AiMlAuto/.venv/bin/python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
+## Run the Project
 
-Then open http://127.0.0.1:8000.
+## Saved Model
+
+## Key Takeaways
+
+## Disclaimer
+
+## Author
