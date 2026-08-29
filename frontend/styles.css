@@ -1,12 +1,13 @@
 :root {
   --bg: #07111f;
-  --card: rgba(10, 21, 40, 0.92);
-  --card-2: rgba(16, 32, 57, 0.9);
-  --border: rgba(140, 179, 255, 0.18);
+  --card: rgba(12, 24, 45, 0.95);
+  --card-2: rgba(18, 35, 60, 0.92);
+  --border: rgba(100, 160, 255, 0.12);
   --text: #e8eefc;
-  --muted: #92a5c8;
+  --muted: #8fa3c4;
   --primary: #5dd7ff;
   --primary-2: #7c4dff;
+  --accent-glow: linear-gradient(90deg, var(--primary), var(--primary-2));
 }
 
 * {
@@ -39,23 +40,63 @@ main.container {
   min-height: auto;
 }
 
+/* ── Navbar ── */
 .topbar {
-  background: rgba(5, 13, 30, 0.92) !important;
-  backdrop-filter: blur(16px);
+  background: rgba(5, 13, 30, 0.94) !important;
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
 
-.topbar .navbar-brand,
-.topbar .nav-link {
+.topbar .navbar-brand {
   color: #f2f6ff !important;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
+.topbar .nav-link {
+  color: rgba(220, 230, 255, 0.7) !important;
+  font-weight: 500;
+  transition: color 0.2s;
+  position: relative;
+}
+
+.topbar .nav-link:hover,
+.topbar .nav-link.active {
+  color: #fff !important;
+}
+
+.topbar .nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 2px;
+  background: var(--accent-glow);
+  border-radius: 2px;
+}
+
+/* ── Cards ── */
 .hero-card,
 .panel-card,
 .glass-card {
   background: var(--card);
   border: 1px solid var(--border);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-glow);
+  opacity: 0.6;
 }
 
 .hero-card {
@@ -64,6 +105,12 @@ main.container {
 
 .panel-card {
   min-height: auto;
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+
+.panel-card:hover {
+  border-color: rgba(93, 215, 255, 0.2);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.32), 0 0 20px rgba(93, 215, 255, 0.04);
 }
 
 .badge-soft {
@@ -89,11 +136,13 @@ main.container {
   border: none;
   color: #06111d;
   font-weight: 700;
+  transition: filter 0.2s, transform 0.15s;
 }
 
 .btn-primary:hover {
   filter: brightness(1.08);
   color: #06111d;
+  transform: translateY(-1px);
 }
 
 .chart-canvas-wrap {
@@ -140,6 +189,11 @@ canvas {
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
+.form-select option {
+  background: #0d1b2a;
+  color: #e0e6ff;
+}
+
 .form-control::placeholder,
 .form-label,
 .text-secondary,
@@ -147,6 +201,41 @@ canvas {
   color: var(--muted) !important;
 }
 
+.form-text {
+  color: rgba(200, 210, 230, 0.7) !important;
+}
+
+/* ── Stat boxes ── */
+.stat-box {
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.stat-box:hover {
+  border-color: rgba(93, 215, 255, 0.22);
+  transform: translateY(-2px);
+}
+
+.stat-box .value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  margin-top: 0.3rem;
+  background: linear-gradient(135deg, #fff, #c0d8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-box .value-sm {
+  font-size: 1.3rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+/* ── Metric pills ── */
 .metric-pill {
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
@@ -154,6 +243,11 @@ canvas {
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.03);
   color: #dce8ff;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.metric-pill:hover {
+  background: rgba(255,255,255,0.06);
 }
 
 .metric-pill.active {
@@ -162,6 +256,7 @@ canvas {
   color: #9df1ff;
 }
 
+/* ── Status/alerts ── */
 .status-box {
   background: rgba(7, 17, 31, 0.9) !important;
   color: #e8eefc !important;
@@ -195,6 +290,7 @@ canvas {
   background: linear-gradient(90deg, var(--primary), var(--primary-2));
 }
 
+/* ── Downloads ── */
 .download-grid {
   display: grid;
   gap: 0.75rem;
@@ -206,13 +302,16 @@ canvas {
   padding: 0.9rem 1rem;
   border-color: rgba(255,255,255,0.16);
   background: rgba(255,255,255,0.03);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
 .download-link:hover {
   background: rgba(93, 215, 255, 0.1);
   border-color: rgba(93, 215, 255, 0.35);
+  transform: translateY(-1px);
 }
 
+/* ── Prediction ── */
 .prediction-grid {
   display: grid;
   gap: 1rem;
@@ -236,6 +335,7 @@ canvas {
   color: #9df1ff;
 }
 
+/* ── Feature importance ── */
 .feature-importance-list {
   display: grid;
   gap: 0.6rem;
@@ -270,6 +370,7 @@ canvas {
   background: linear-gradient(90deg, var(--primary), var(--primary-2));
 }
 
+/* ── Toast ── */
 .toast-container .toast {
   background: rgba(6, 17, 34, 0.96);
   color: var(--text);
@@ -287,25 +388,7 @@ canvas {
   min-width: 280px;
 }
 
-.stat-box {
-  padding: 1rem;
-  border-radius: 1rem;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-}
-
-.stat-box .value {
-  font-size: 1.85rem;
-  font-weight: 800;
-  margin-top: 0.3rem;
-}
-
-.stat-box .value-sm {
-  font-size: 1.3rem;
-  line-height: 1.2;
-  word-break: break-word;
-}
-
+/* ── Table ── */
 .table {
   --bs-table-bg: transparent;
   --bs-table-color: var(--text);
@@ -342,6 +425,70 @@ canvas {
   color: var(--text);
 }
 
+/* ── Preprocessing accordion ── */
+.prep-accordion-item {
+  border-color: var(--border) !important;
+  background: rgba(255,255,255,0.02);
+  overflow: hidden;
+}
+
+.prep-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.prep-accordion-header:hover {
+  background: rgba(93, 215, 255, 0.04);
+}
+
+.prep-accordion-body {
+  display: none;
+  padding: 0 1rem 0.8rem;
+  color: rgba(220, 230, 255, 0.85);
+  font-size: 0.88rem;
+}
+
+.prep-accordion-item.open .prep-accordion-body {
+  display: block;
+}
+
+.prep-tag {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(93, 215, 255, 0.1);
+  border: 1px solid rgba(93, 215, 255, 0.2);
+  color: #b0e8ff;
+  font-size: 0.82rem;
+  font-family: 'Inter', monospace;
+}
+
+/* ── Collapsible model detail cards ── */
+.model-detail-body {
+  display: none;
+}
+.open > .model-detail-body {
+  display: block;
+}
+.model-detail-arrow {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  transition: transform 0.2s;
+}
+.open > .model-detail-toggle .model-detail-arrow,
+.prep-accordion-item.open .model-detail-arrow {
+  transform: rotate(180deg);
+}
+
+/* ── Responsive ── */
 @media (max-width: 767.98px) {
   .display-6 {
     font-size: 2rem;

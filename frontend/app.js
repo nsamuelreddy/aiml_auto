@@ -1,7 +1,14 @@
-const API_BASE_URL = "https://aiml-auto.onrender.com";
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '0.0.0.0'
+  ? window.location.origin
+  : "https://aiml-auto.onrender.com";
 let metricsChart;
 let selectedMetric = 'Accuracy';
 let metricOptions = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC-AUC'];
+
+// Maximum allowed file size (20 MB)
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+function bytesToMB(bytes) { return bytes / (1024 * 1024); }
 
 const statusBox = document.getElementById('statusBox');
 const summaryCards = document.getElementById('summaryCards');
@@ -364,6 +371,11 @@ function updateComparisonChart() {
   const { labels, values, classificationMode } = getComparisonChartSeries(result);
   const axisBounds = getMetricAxisBounds(values);
 
+  const titleEl = document.getElementById('performanceOverviewTitle');
+  if (titleEl) {
+    titleEl.textContent = `Performance overview (${selectedMetric})`;
+  }
+
   if (metricsChart) {
     metricsChart.destroy();
   }
@@ -410,6 +422,7 @@ function updateComparisonChart() {
                 text: chartLegendLabel(label, data.datasets[0].data[index], result),
                 fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
                 strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
+                fontColor: '#c8d7ef',
                 pointStyle: 'circle',
                 hidden: false,
                 index,
@@ -519,6 +532,7 @@ function updateScoreDistributionChart(result) {
                 text: chartLegendLabel(label, data.datasets[0].data[index], result),
                 fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
                 strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
+                fontColor: '#c8d7ef',
                 pointStyle: 'circle',
                 hidden: false,
                 index,
@@ -687,40 +701,47 @@ function renderModelDetails(result) {
   const entries = Object.entries(result.evaluation);
   const importanceByModel = result.feature_importance || {};
   modelDetails.innerHTML = entries
-    .map(([name, metrics]) => `
-      <div class="border rounded-3 p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
+    .map(([name, metrics], idx) => `
+      <div class="border rounded-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center p-3 model-detail-toggle" style="cursor:pointer" onclick="this.parentElement.classList.toggle('open')">
           <h4 class="h6 mb-0">${name}</h4>
-          <span class="badge bg-secondary">${result.primary_metric || metricNames[0]} ${formatMetric(metrics[result.primary_metric || metricNames[0]], result, result.primary_metric || metricNames[0])}</span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary">${result.primary_metric || metricNames[0]} ${formatMetric(metrics[result.primary_metric || metricNames[0]], result, result.primary_metric || metricNames[0])}</span>
+            <span class="model-detail-arrow">&#9662;</span>
+          </div>
         </div>
-        <div class="row g-2">
-          ${metricNames
-            .filter((metric) => Object.prototype.hasOwnProperty.call(metrics, metric))
-            .map((metric) => `
-              <div class="col-sm-6">
-                <div class="small text-muted">${metric}</div>
-                <div>${formatMetric(metrics[metric], result, metric)}</div>
-              </div>
-            `)
-            .join('')}
-        </div>
-        ${Array.isArray(importanceByModel[name]) && importanceByModel[name].length ? `
-          <div class="mt-3">
-            <div class="small text-muted mb-2">Feature Importance</div>
-            <div class="feature-importance-list">
-              ${importanceByModel[name]
-                .map((item) => `
-                  <div class="feature-importance-row">
-                    <div class="feature-importance-label">${escapeHtml(item.feature)}</div>
-                    <div class="feature-importance-bar-wrap">
-                      <div class="feature-importance-bar" style="width: ${Math.max(4, Number(item.importance) * 100)}%"></div>
-                    </div>
+        <div class="model-detail-body">
+          <div class="px-3 pb-3">
+            <div class="row g-2">
+              ${metricNames
+                .filter((metric) => Object.prototype.hasOwnProperty.call(metrics, metric))
+                .map((metric) => `
+                  <div class="col-sm-6">
+                    <div class="small text-muted">${metric}</div>
+                    <div>${formatMetric(metrics[metric], result, metric)}</div>
                   </div>
                 `)
                 .join('')}
             </div>
+            ${Array.isArray(importanceByModel[name]) && importanceByModel[name].length ? `
+              <div class="mt-3">
+                <div class="small text-muted mb-2">Feature Importance</div>
+                <div class="feature-importance-list">
+                  ${importanceByModel[name]
+                    .map((item) => `
+                      <div class="feature-importance-row">
+                        <div class="feature-importance-label">${escapeHtml(item.feature)}</div>
+                        <div class="feature-importance-bar-wrap">
+                          <div class="feature-importance-bar" style="width: ${Math.max(4, Number(item.importance) * 100)}%"></div>
+                        </div>
+                      </div>
+                    `)
+                    .join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
-        ` : ''}
+        </div>
       </div>
     `)
     .join('');
@@ -861,6 +882,107 @@ async function runPrediction(event) {
   }
 }
 
+function renderPreprocessingSummary(result) {
+  const section = document.getElementById('preprocessingSection');
+  const content = document.getElementById('preprocessingContent');
+  if (!section || !content) return;
+
+  const prep = result.preprocessing || {};
+  const ds = result.dataset || {};
+  const items = [];
+
+  // 1. Dropped columns
+  const dropped = ds.dropped_columns || [];
+  if (dropped.length) {
+    items.push({
+      title: `Dropped Columns (${dropped.length})`,
+      icon: '🗑️',
+      body: `<div class="d-flex flex-wrap gap-1">${dropped.map(c => `<span class="prep-tag">${escapeHtml(c)}</span>`).join('')}</div>`
+    });
+  }
+
+  // 2. Duplicate rows
+  const dupes = ds.duplicate_rows_removed || 0;
+  if (dupes > 0) {
+    items.push({
+      title: `Duplicate Rows Removed`,
+      icon: '📋',
+      body: `<p class="mb-0">${dupes} duplicate row${dupes > 1 ? 's' : ''} removed from the dataset.</p>`
+    });
+  }
+
+  // 3. Missing values filled
+  const mvr = prep.missing_value_report;
+  if (mvr && typeof mvr === 'object' && Object.keys(mvr).length) {
+    let rows = '';
+    for (const [strategy, cols] of Object.entries(mvr)) {
+      if (Array.isArray(cols) && cols.length) {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(strategy)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
+      } else if (typeof cols === 'string') {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(strategy)}</strong>: ${escapeHtml(cols)}</div>`;
+      }
+    }
+    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(mvr, null, 2))}</pre>`;
+    items.push({ title: 'Missing Values Filled', icon: '🔧', body: rows });
+  }
+
+  // 4. Encoding
+  const enc = prep.encoding_report;
+  if (enc && typeof enc === 'object' && Object.keys(enc).length) {
+    let rows = '';
+    for (const [method, cols] of Object.entries(enc)) {
+      if (Array.isArray(cols) && cols.length) {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
+      } else if (typeof cols === 'string') {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong>: ${escapeHtml(cols)}</div>`;
+      }
+    }
+    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(enc, null, 2))}</pre>`;
+    items.push({ title: 'Encoding Applied', icon: '🏷️', body: rows });
+  }
+
+  // 5. Feature selection
+  const feat = prep.feature_report;
+  if (feat && typeof feat === 'object' && Object.keys(feat).length) {
+    let rows = '';
+    for (const [method, cols] of Object.entries(feat)) {
+      if (Array.isArray(cols) && cols.length) {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
+      } else if (typeof cols === 'string') {
+        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong>: ${escapeHtml(cols)}</div>`;
+      }
+    }
+    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(feat, null, 2))}</pre>`;
+    items.push({ title: 'Feature Selection', icon: '🎯', body: rows });
+  }
+
+  // 6. Warnings
+  const warns = prep.warnings || [];
+  if (warns.length) {
+    items.push({
+      title: `Warnings (${warns.length})`,
+      icon: '⚠️',
+      body: warns.map(w => `<div class="alert alert-warning py-1 px-2 mb-1 small">${escapeHtml(w)}</div>`).join('')
+    });
+  }
+
+  if (!items.length) {
+    items.push({ title: 'No Changes', icon: '✅', body: '<p class="mb-0 text-muted">No preprocessing steps were needed.</p>' });
+  }
+
+  content.innerHTML = items.map((item, i) => `
+    <div class="prep-accordion-item border rounded-3 mb-2">
+      <div class="prep-accordion-header" onclick="this.parentElement.classList.toggle('open')">
+        <span>${item.icon} ${item.title}</span>
+        <span class="model-detail-arrow">&#9662;</span>
+      </div>
+      <div class="prep-accordion-body">${item.body}</div>
+    </div>
+  `).join('');
+
+  section.classList.remove('d-none');
+}
+
 function renderResult(result) {
   window.currentResult = result;
   window.currentJobId = result.job_id || window.currentJobId;
@@ -876,6 +998,7 @@ function renderResult(result) {
   detailsSection?.classList.remove('d-none');
 
   buildSummaryCards(result);
+  renderPreprocessingSummary(result);
   renderChartTypeButtons();
   renderMetricButtons(result);
   selectedMetric = result.primary_metric || metricOptions[0];
@@ -906,11 +1029,19 @@ function renderResult(result) {
 async function runPipeline(event) {
   event.preventDefault();
   const file = document.getElementById('datasetFile').files[0];
-  const targetColumn = document.getElementById('targetColumn').value.trim() || 'survived';
+  const targetColumn = document.getElementById('targetColumn').value.trim();
 
   if (!file) {
     setStatus('Please choose a dataset file before running the pipeline.', 'error');
     showToast('Please choose a dataset file before running the pipeline.', 'danger');
+    return;
+  }
+
+  // Re-check file size before uploading
+  if (file.size > MAX_FILE_SIZE) {
+    const sizeMB = bytesToMB(file.size).toFixed(1);
+    setStatus(`File too large. Your file is ${sizeMB} MB. The maximum allowed size is 20 MB.`, 'error');
+    showToast(`File too large (${sizeMB} MB). Maximum is 20 MB.`, 'danger');
     return;
   }
 
@@ -944,3 +1075,59 @@ async function runPipeline(event) {
 
 document.getElementById('pipelineForm').addEventListener('submit', runPipeline);
 document.getElementById('predictionForm')?.addEventListener('submit', runPrediction);
+
+// When a CSV file is selected, read its header row and populate the target column dropdown.
+// The last column is auto-selected as the default target.
+datasetFileInput.addEventListener('change', function () {
+  const file = this.files[0];
+  const select = document.getElementById('targetColumn');
+  const fileInfoEl = document.getElementById('fileInfo');
+  const fileErrorEl = document.getElementById('fileError');
+
+  // Reset dropdown
+  select.innerHTML = '<option value="" selected disabled>Upload a CSV to see columns</option>';
+
+  // Clear previous messages
+  if (fileInfoEl) fileInfoEl.textContent = '';
+  if (fileErrorEl) { fileErrorEl.textContent = ''; fileErrorEl.classList.add('d-none'); }
+
+  if (!file) return;
+
+  // Show file size
+  const sizeMB = bytesToMB(file.size).toFixed(2);
+  if (fileInfoEl) fileInfoEl.textContent = `Selected: ${file.name} (${sizeMB} MB)`;
+
+  // Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    const msg = `File too large. Your file is ${sizeMB} MB. The maximum allowed size is 20 MB.`;
+    if (fileErrorEl) { fileErrorEl.textContent = msg; fileErrorEl.classList.remove('d-none'); }
+    runButton.disabled = true;
+    return;
+  }
+
+  if (fileErrorEl) fileErrorEl.classList.add('d-none');
+  runButton.disabled = false;
+
+  if (!/\.csv$/i.test(file.name)) return;
+
+  // Read only the first 64 KB to get the header row
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const firstLine = (e.target.result || '').split(/\r?\n/)[0].trim();
+    if (!firstLine) return;
+
+    const cols = firstLine.split(',').map(c => c.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    if (!cols.length) return;
+
+    // Populate dropdown and select the last column
+    select.innerHTML = '';
+    cols.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      select.appendChild(opt);
+    });
+    select.value = cols[cols.length - 1];
+  };
+  reader.readAsText(file.slice(0, 65536));
+});

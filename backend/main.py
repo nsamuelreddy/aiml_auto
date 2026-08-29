@@ -53,6 +53,9 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ARTIFACTS_DIR = ROOT_DIR / "saved_models"
 ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Maximum allowed upload size in bytes (20 MB)
+MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024
+
 ARTIFACT_FILENAMES = {
     "evaluation-report": "evaluation_report.csv",
     "model-comparison": "model_comparison.csv",
@@ -391,6 +394,12 @@ def _build_pipeline_result(job_id: str, file_path: str, target_column: str, prog
     _emit_progress(progress_callback, 2, "Loading dataset")
     original_df = load_dataset(file_path)
 
+    # In production (Render free tier), downsample large datasets to 10,000 rows
+    # to stay safely within the 512MB RAM limit and prevent OOM restarts.
+    import os
+    if os.environ.get("RENDER") == "true" and len(original_df) > 10000:
+        original_df = original_df.sample(n=10000, random_state=42).reset_index(drop=True)
+
     _emit_progress(progress_callback, 6, "Cleaning column names")
     df = clean_column_names(original_df.copy())
 
@@ -582,9 +591,45 @@ async def run_pipeline(file: UploadFile = File(...), target_column: str = Form("
     if not file.filename:
         raise HTTPException(status_code=400, detail="A dataset file is required.")
 
+    # Defensive server-side validation: reject files larger than MAX_UPLOAD_SIZE_BYTES
+    # Try to determine size without consuming the upload stream if possible
+    file_size = None
+    try:
+        # Seek to end to determine size for spooled/temp files
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+    except Exception:
+        file_size = None
+
+    if file_size is not None and file_size > MAX_UPLOAD_SIZE_BYTES:
+        size_mb = file_size / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File too large. Your file is {size_mb:.1f} MB. The maximum allowed size is 20 MB.")
+
     file_path = UPLOAD_DIR / file.filename
+
+    # If size couldn't be determined earlier, stream to disk while enforcing the limit
     with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        total_written = 0
+        chunk_size = 64 * 1024
+        while True:
+            chunk = file.file.read(chunk_size)
+            if not chunk:
+                break
+            buffer.write(chunk)
+            total_written += len(chunk)
+            if total_written > MAX_UPLOAD_SIZE_BYTES:
+                # remove partial file and return 413
+                try:
+                    buffer.close()
+                except Exception:
+                    pass
+                try:
+                    file_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                size_mb = total_written / (1024 * 1024)
+                raise HTTPException(status_code=413, detail=f"File too large. Your file is {size_mb:.1f} MB. The maximum allowed size is 20 MB.")
 
     job_id = uuid.uuid4().hex
     _update_pipeline_job(job_id, status="queued", progress=0, message="Queued")
