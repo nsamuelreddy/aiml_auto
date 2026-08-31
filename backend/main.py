@@ -390,7 +390,7 @@ def _load_job_artifacts(job_id: str) -> dict[str, Any]:
     }
 
 
-def _build_pipeline_result(job_id: str, file_path: str, target_column: str, progress_callback=None) -> dict[str, Any]:
+def _build_pipeline_result(job_id: str, file_path: str, target_column: str, progress_callback=None, skip_svm_by_size: bool = False) -> dict[str, Any]:
     _emit_progress(progress_callback, 2, "Loading dataset")
     original_df = load_dataset(file_path)
 
@@ -457,7 +457,11 @@ def _build_pipeline_result(job_id: str, file_path: str, target_column: str, prog
             _emit_progress(progress_callback, progress, f"Training model: {model_name}")
 
         _emit_progress(progress_callback, 70, "Training classification models")
-        trained_models, predictions = train_models(X_train, y_train, X_test, progress_callback=training_progress)
+        trained_models, predictions = train_models(
+            X_train, y_train, X_test,
+            progress_callback=training_progress,
+            skip_svm_by_size=skip_svm_by_size,
+        )
         _emit_progress(progress_callback, 88, "Evaluating models")
         evaluation_report = evaluate_models(trained_models, predictions, X_test, y_test)
         _emit_progress(progress_callback, 92, "Comparing models")
@@ -474,7 +478,11 @@ def _build_pipeline_result(job_id: str, file_path: str, target_column: str, prog
             _emit_progress(progress_callback, progress, f"Training model: {model_name}")
 
         _emit_progress(progress_callback, 70, "Training regression models")
-        trained_models, predictions = train_regression_models(X_train, y_train, X_test, progress_callback=training_progress)
+        trained_models, predictions = train_regression_models(
+            X_train, y_train, X_test,
+            progress_callback=training_progress,
+            skip_svr_by_size=skip_svm_by_size,
+        )
         _emit_progress(progress_callback, 88, "Evaluating models")
         evaluation_report = evaluate_regression_models(trained_models, predictions, y_test)
         _emit_progress(progress_callback, 92, "Comparing models")
@@ -569,13 +577,17 @@ def _build_pipeline_result(job_id: str, file_path: str, target_column: str, prog
     }
 
 
-def _run_pipeline_job(job_id: str, file_path: str, target_column: str) -> None:
+def _run_pipeline_job(job_id: str, file_path: str, target_column: str, skip_svm_by_size: bool = False) -> None:
     def progress_callback(progress: int, message: str) -> None:
         _update_pipeline_job(job_id, status="running", progress=progress, message=message)
 
     try:
         _update_pipeline_job(job_id, status="running", progress=1, message="Starting pipeline")
-        result = _build_pipeline_result(job_id, file_path, target_column, progress_callback=progress_callback)
+        result = _build_pipeline_result(
+            job_id, file_path, target_column,
+            progress_callback=progress_callback,
+            skip_svm_by_size=skip_svm_by_size,
+        )
         _update_pipeline_job(job_id, status="completed", progress=100, message="Pipeline completed", result=result)
     except Exception as exc:  # pragma: no cover - defensive API error handling
         _update_pipeline_job(job_id, status="failed", progress=100, message=str(exc), error=str(exc))
@@ -634,7 +646,15 @@ async def run_pipeline(file: UploadFile = File(...), target_column: str = Form("
     job_id = uuid.uuid4().hex
     _update_pipeline_job(job_id, status="queued", progress=0, message="Queued")
 
-    worker = threading.Thread(target=_run_pipeline_job, args=(job_id, str(file_path), target_column))
+    # Skip SVM/SVR when the CSV file exceeds 1.5 MB (fast-path for large files)
+    SVM_FILE_SIZE_LIMIT_MB = 1.5
+    saved_size_bytes = file_path.stat().st_size
+    skip_svm_by_size = saved_size_bytes > SVM_FILE_SIZE_LIMIT_MB * 1024 * 1024
+
+    worker = threading.Thread(
+        target=_run_pipeline_job,
+        args=(job_id, str(file_path), target_column, skip_svm_by_size),
+    )
     worker.start()
 
     return {"job_id": job_id, "status": "queued", "progress": 0, "message": "Queued"}

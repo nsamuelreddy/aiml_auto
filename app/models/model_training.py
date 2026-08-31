@@ -11,8 +11,12 @@ from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 
+# Skip SVM when training rows exceed this threshold.
+# SVM time complexity is O(n²)–O(n³), making it impractically slow on large data.
+SVM_ROW_LIMIT = 10_000
 
-def get_models():
+
+def get_models(skip_svm: bool = False):
 
     models = {
 
@@ -24,10 +28,6 @@ def get_models():
 
         "KNN": KNeighborsClassifier(),
 
-        "SVM": CalibratedClassifierCV(
-            estimator=SVC(),
-            ensemble=False
-        ),
         "Gradient Boosting": GradientBoostingClassifier(random_state=42),
         "Naive Bayes": GaussianNB(),
 
@@ -43,6 +43,12 @@ def get_models():
 
     }
 
+    if not skip_svm:
+        models["SVM"] = CalibratedClassifierCV(
+            estimator=SVC(),
+            ensemble=False
+        )
+
     return models
 
 
@@ -50,14 +56,18 @@ def train_models(
     x_train,
     y_train,
     x_test,
-    progress_callback=None
+    progress_callback=None,
+    skip_svm_by_size: bool = False,
 ):
 
     trained_models = {}
 
     predictions = {}
 
-    models = get_models()
+    n_rows = len(x_train)
+    skip_svm = skip_svm_by_size or (n_rows > SVM_ROW_LIMIT)
+
+    models = get_models(skip_svm=skip_svm)
 
     total_models = len(models)
 
@@ -76,5 +86,12 @@ def train_models(
 
         if progress_callback is not None:
             progress_callback(index, total_models, name)
+
+    if skip_svm and progress_callback is not None:
+        if skip_svm_by_size:
+            reason = "file size > 1.5 MB"
+        else:
+            reason = f"{n_rows:,} rows > {SVM_ROW_LIMIT:,} limit"
+        progress_callback(total_models, total_models, f"SVM skipped ({reason})")
 
     return trained_models, predictions

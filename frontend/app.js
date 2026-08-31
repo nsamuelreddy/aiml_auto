@@ -42,6 +42,42 @@ let scoreDistributionChart;
 let importanceFeatureChart;
 let selectedImportanceModel = null;
 
+/* ─────────────────────────────────────────────────
+   SCROLL-REVEAL SYSTEM
+   Watches any element with .reveal-left / .reveal-right / .reveal-up
+   and adds .is-visible when it enters the viewport.
+───────────────────────────────────────────────── */
+const revealObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        revealObserver.unobserve(entry.target); // animate once
+      }
+    });
+  },
+  { threshold: 0.12 }
+);
+
+/**
+ * Attach scroll-reveal classes to a section's direct panel-cards and columns.
+ * leftSel  → selector(s) that slide from the LEFT
+ * rightSel → selector(s) that slide from the RIGHT
+ * upSel    → selector(s) that slide UP
+ */
+function revealSection(root, { left = [], right = [], up = [] } = {}) {
+  const observe = (sel, cls, delayClass) => {
+    root.querySelectorAll(sel).forEach((el, i) => {
+      el.classList.add(cls);
+      if (i < 6) el.classList.add(`reveal-delay-${i + 1}`);
+      revealObserver.observe(el);
+    });
+  };
+  left.forEach((sel)  => observe(sel, 'reveal-left'));
+  right.forEach((sel) => observe(sel, 'reveal-right'));
+  up.forEach((sel)    => observe(sel, 'reveal-up'));
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -266,22 +302,22 @@ function buildSummaryCards(result) {
   const metricDisplay = formatMetric(bestMetricValue, result, bestMetricLabel);
 
   summaryCards.innerHTML = `
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">Problem Type</div><div class="value value-sm">${escapeHtml(dashboardSummary.problem_type || result.problem_type || '—')}</div></div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">Rows</div><div class="value">${dashboardSummary.rows ?? result.dataset.rows}</div></div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">Columns</div><div class="value">${dashboardSummary.columns ?? result.dataset.columns}</div></div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">Missing Values</div><div class="value">${dashboardSummary.missing_values ?? result.dataset.missing_values_total ?? 0}</div></div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">Best Model</div><div class="value value-sm">${escapeHtml(dashboardSummary.best_model || result.best_model_name || result.best_model?.Model || '—')}</div></div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-md-4 col-lg-2">
       <div class="stat-box"><div class="small text-muted">${escapeHtml(bestMetricLabel)}</div><div class="value value-sm">${metricDisplay}</div></div>
     </div>
   `;
@@ -385,8 +421,8 @@ function updateComparisonChart() {
   const commonDataset = {
     label: selectedMetric,
     data: values,
-    backgroundColor: ['#5dd7ff', '#7c4dff', '#6ee7b7', '#f59e0b', '#fb7185', '#a78bfa'],
-    borderColor: '#5dd7ff',
+    backgroundColor: ['#6366f1', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981', '#ec4899'],
+    borderColor: '#6366f1',
     borderWidth: selectedChartType === 'line' ? 3 : 0,
     fill: selectedChartType === 'line',
     tension: 0.35,
@@ -413,7 +449,7 @@ function updateComparisonChart() {
           display: selectedChartType === 'doughnut' || selectedChartType === 'radar',
           position: 'bottom',
           labels: {
-            color: '#c8d7ef',
+            color: '#374151',
             usePointStyle: true,
             padding: 16,
             generateLabels(chart) {
@@ -422,7 +458,7 @@ function updateComparisonChart() {
                 text: chartLegendLabel(label, data.datasets[0].data[index], result),
                 fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
                 strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                fontColor: '#c8d7ef',
+                fontColor: '#374151',
                 pointStyle: 'circle',
                 hidden: false,
                 index,
@@ -441,12 +477,12 @@ function updateComparisonChart() {
       scales: selectedChartType === 'radar'
         ? {
             r: {
-              angleLines: { color: 'rgba(255,255,255,0.08)' },
-              grid: { color: 'rgba(255,255,255,0.08)' },
-              pointLabels: { color: '#c8d7ef' },
+              angleLines: { color: 'rgba(99,102,241,0.15)' },
+              grid: { color: 'rgba(99,102,241,0.10)' },
+              pointLabels: { color: '#374151' },
               ticks: {
                 backdropColor: 'transparent',
-                color: '#c8d7ef',
+                color: '#6b7280',
               },
             },
           }
@@ -458,16 +494,16 @@ function updateComparisonChart() {
                 min: axisBounds.min,
                 max: axisBounds.max,
                 ticks: {
-                  color: '#c8d7ef',
+                  color: '#6b7280',
                   callback: (value) => chartTickLabel(value, result),
                 },
                 grid: {
-                  color: 'rgba(255,255,255,0.08)',
+                  color: 'rgba(99,102,241,0.08)',
                 },
               },
               x: {
                 ticks: {
-                  color: '#c8d7ef',
+                  color: '#6b7280',
                 },
                 grid: {
                   display: false,
@@ -508,8 +544,8 @@ function updateScoreDistributionChart(result) {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: ['#5dd7ff', '#7c4dff', '#6ee7b7', '#f59e0b', '#fb7185'],
-        borderColor: '#07111f',
+        backgroundColor: ['#6366f1', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981'],
+        borderColor: '#ffffff',
         borderWidth: 3,
       }],
     },
@@ -522,7 +558,7 @@ function updateScoreDistributionChart(result) {
         legend: {
           position: 'bottom',
           labels: {
-            color: '#c8d7ef',
+            color: '#374151',
             usePointStyle: true,
             boxWidth: 10,
             padding: 16,
@@ -532,7 +568,7 @@ function updateScoreDistributionChart(result) {
                 text: chartLegendLabel(label, data.datasets[0].data[index], result),
                 fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
                 strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                fontColor: '#c8d7ef',
+                fontColor: '#374151',
                 pointStyle: 'circle',
                 hidden: false,
                 index,
@@ -618,8 +654,9 @@ function updateFeatureImportanceChart(result) {
       datasets: [{
         label: 'Feature Importance',
         data: values,
-        backgroundColor: '#5dd7ff',
-        borderRadius: 10,
+        backgroundColor: 'rgba(99,102,241,0.75)',
+        borderRadius: 8,
+        borderSkipped: false,
       }],
     },
     options: {
@@ -633,13 +670,13 @@ function updateFeatureImportanceChart(result) {
       scales: {
         x: {
           ticks: {
-            color: '#c8d7ef',
+            color: '#6b7280',
             callback: (value) => `${Number(value).toFixed(1)}%`,
           },
-          grid: { color: 'rgba(255,255,255,0.08)' },
+          grid: { color: 'rgba(99,102,241,0.08)' },
         },
         y: {
-          ticks: { color: '#c8d7ef' },
+          ticks: { color: '#374151', font: { weight: '500' } },
           grid: { display: false },
         },
       },
@@ -702,11 +739,11 @@ function renderModelDetails(result) {
   const importanceByModel = result.feature_importance || {};
   modelDetails.innerHTML = entries
     .map(([name, metrics], idx) => `
-      <div class="border rounded-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center p-3 model-detail-toggle" style="cursor:pointer" onclick="this.parentElement.classList.toggle('open')">
-          <h4 class="h6 mb-0">${name}</h4>
+      <div class="model-insight-row reveal-right reveal-delay-${Math.min(idx + 1, 6)}">
+        <div class="model-insight-toggle model-detail-toggle" onclick="this.parentElement.classList.toggle('open')">
+          <h4>${name}</h4>
           <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-secondary">${result.primary_metric || metricNames[0]} ${formatMetric(metrics[result.primary_metric || metricNames[0]], result, result.primary_metric || metricNames[0])}</span>
+            <span class="model-metric-badge">${result.primary_metric || metricNames[0]} ${formatMetric(metrics[result.primary_metric || metricNames[0]], result, result.primary_metric || metricNames[0])}</span>
             <span class="model-detail-arrow">&#9662;</span>
           </div>
         </div>
@@ -718,7 +755,7 @@ function renderModelDetails(result) {
                 .map((metric) => `
                   <div class="col-sm-6">
                     <div class="small text-muted">${metric}</div>
-                    <div>${formatMetric(metrics[metric], result, metric)}</div>
+                    <div class="fw-semibold">${formatMetric(metrics[metric], result, metric)}</div>
                   </div>
                 `)
                 .join('')}
@@ -745,6 +782,13 @@ function renderModelDetails(result) {
       </div>
     `)
     .join('');
+
+  // Trigger reveal after DOM is updated
+  requestAnimationFrame(() => {
+    modelDetails.querySelectorAll('.reveal-right').forEach((el) => {
+      revealObserver.observe(el);
+    });
+  });
 }
 
 function renderDownloadButtons(result) {
@@ -792,8 +836,8 @@ function renderPredictionForm(result) {
 
   predictionFeatureGrid.innerHTML = featureNames
     .map((featureName) => `
-      <div class="col-md-6 col-lg-4">
-        <label class="form-label fw-semibold">${escapeHtml(featureName)}</label>
+      <div class="prediction-input-wrap">
+        <label class="form-label fw-semibold text-truncate d-block mb-1" title="${escapeHtml(featureName)}">${escapeHtml(featureName)}</label>
         <input class="form-control prediction-input" type="number" step="any" data-feature-name="${escapeHtml(featureName)}" placeholder="Enter value" />
       </div>
     `)
@@ -1010,6 +1054,49 @@ function renderResult(result) {
   renderModelDetails(result);
   renderDownloadButtons(result);
   renderPredictionForm(result);
+
+  // Attach scroll-reveal animations after DOM settles
+  requestAnimationFrame(() => {
+    // Stat boxes → slide up
+    if (resultsSection) {
+      revealSection(resultsSection, { up: ['.stat-box'] });
+    }
+    // Preprocessing panel → slide from left
+    const prepSection = document.getElementById('preprocessingSection');
+    if (prepSection) {
+      revealSection(prepSection, { left: ['.panel-card'] });
+    }
+    // Comparison section: chart card → left, top-model card → right
+    if (comparisonSection) {
+      const cols = comparisonSection.querySelectorAll('.col-lg-8, .col-lg-4');
+      cols.forEach((col, i) => {
+        const card = col.querySelector('.panel-card');
+        if (!card) return;
+        card.classList.add(i === 0 ? 'reveal-left' : 'reveal-right');
+        revealObserver.observe(card);
+      });
+    }
+    // Score dist → left, feature importance → right
+    if (comparisonBreakdown) {
+      const cols = comparisonBreakdown.querySelectorAll('.col-lg-5, .col-lg-7');
+      cols.forEach((col, i) => {
+        const card = col.querySelector('.panel-card');
+        if (!card) return;
+        card.classList.add(i === 0 ? 'reveal-left' : 'reveal-right');
+        revealObserver.observe(card);
+      });
+    }
+    // Details section: model insights → left
+    if (detailsSection) {
+      revealSection(detailsSection, { left: ['.panel-card'] });
+    }
+    // Downloads & Prediction → slide up
+    const downloadsEl = document.getElementById('downloadsSection');
+    const predEl = document.getElementById('predictionSection');
+    if (downloadsEl) revealSection(downloadsEl, { up: ['.panel-card'] });
+    if (predEl) revealSection(predEl, { up: ['.panel-card'] });
+  });
+
   // show preprocessing warnings if any
   try {
     const warnings = result.preprocessing && result.preprocessing.warnings;
