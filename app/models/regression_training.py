@@ -54,6 +54,7 @@ def train_regression_models(
     X_test,
     progress_callback=None,
     skip_svr_by_size: bool = False,
+    selected_model_name: str | None = None,
 ):
 
     trained_models = {}
@@ -63,6 +64,8 @@ def train_regression_models(
     skip_svr = skip_svr_by_size or (n_rows > SVR_ROW_LIMIT)
 
     models = get_regression_models(skip_svr=skip_svr)
+    if selected_model_name is not None:
+        models = {selected_model_name: models[selected_model_name]} if selected_model_name in models else {}
 
     total_models = len(models)
 

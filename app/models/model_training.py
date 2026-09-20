@@ -58,6 +58,7 @@ def train_models(
     x_test,
     progress_callback=None,
     skip_svm_by_size: bool = False,
+    selected_model_name: str | None = None,
 ):
 
     trained_models = {}
@@ -68,6 +69,8 @@ def train_models(
     skip_svm = skip_svm_by_size or (n_rows > SVM_ROW_LIMIT)
 
     models = get_models(skip_svm=skip_svm)
+    if selected_model_name is not None:
+        models = {selected_model_name: models[selected_model_name]} if selected_model_name in models else {}
 
     total_models = len(models)
 

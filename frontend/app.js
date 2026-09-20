@@ -5,8 +5,8 @@ let metricsChart;
 let selectedMetric = 'Accuracy';
 let metricOptions = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC-AUC'];
 
-// Maximum allowed file size (20 MB)
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+// Maximum allowed file size (10 MB)
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function bytesToMB(bytes) { return bytes / (1024 * 1024); }
 
@@ -295,6 +295,40 @@ function chartLegendLabel(label, value, result) {
   return `${label} (${chartTickLabel(value, result)})`;
 }
 
+function buildChartLegendConfig(result, colors) {
+  return {
+    position: 'bottom',
+    labels: {
+      color: '#374151',
+      usePointStyle: true,
+      boxWidth: 10,
+      padding: 16,
+      generateLabels(chart) {
+        const data = chart.data;
+        return data.labels.map((label, index) => ({
+          text: chartLegendLabel(label, data.datasets[0].data[index], result),
+          fillStyle: colors[index % colors.length],
+          strokeStyle: colors[index % colors.length],
+          fontColor: '#374151',
+          pointStyle: 'circle',
+          hidden: false,
+          index,
+        }));
+      },
+    },
+  };
+}
+
+function buildChartTooltipConfig(result) {
+  return {
+    callbacks: {
+      label(context) {
+        return chartLegendLabel(context.label, context.raw, result);
+      },
+    },
+  };
+}
+
 function buildSummaryCards(result) {
   const dashboardSummary = result.dashboard_summary || {};
   const bestMetricLabel = dashboardSummary.best_metric_label || result.primary_metric || 'Accuracy';
@@ -447,32 +481,9 @@ function updateComparisonChart() {
       plugins: {
         legend: {
           display: selectedChartType === 'doughnut' || selectedChartType === 'radar',
-          position: 'bottom',
-          labels: {
-            color: '#374151',
-            usePointStyle: true,
-            padding: 16,
-            generateLabels(chart) {
-              const data = chart.data;
-              return data.labels.map((label, index) => ({
-                text: chartLegendLabel(label, data.datasets[0].data[index], result),
-                fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                fontColor: '#374151',
-                pointStyle: 'circle',
-                hidden: false,
-                index,
-              }));
-            },
-          },
+          ...buildChartLegendConfig(result, commonDataset.backgroundColor),
         },
-        tooltip: {
-          callbacks: {
-            label(context) {
-              return chartLegendLabel(context.label, context.raw, result);
-            },
-          },
-        },
+        tooltip: buildChartTooltipConfig(result),
       },
       scales: selectedChartType === 'radar'
         ? {
@@ -538,13 +549,14 @@ function updateScoreDistributionChart(result) {
     return;
   }
 
+  const palette = ['#6366f1', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981'];
   scoreDistributionChart = new Chart(scoreChartCanvas, {
     type: 'doughnut',
     data: {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: ['#6366f1', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981'],
+        backgroundColor: palette,
         borderColor: '#ffffff',
         borderWidth: 3,
       }],
@@ -555,34 +567,8 @@ function updateScoreDistributionChart(result) {
       animation: false,
       cutout: '58%',
       plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            color: '#374151',
-            usePointStyle: true,
-            boxWidth: 10,
-            padding: 16,
-            generateLabels(chart) {
-              const data = chart.data;
-              return data.labels.map((label, index) => ({
-                text: chartLegendLabel(label, data.datasets[0].data[index], result),
-                fillStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                strokeStyle: data.datasets[0].backgroundColor[index % data.datasets[0].backgroundColor.length],
-                fontColor: '#374151',
-                pointStyle: 'circle',
-                hidden: false,
-                index,
-              }));
-            },
-          },
-        },
-        tooltip: {
-          callbacks: {
-            label(context) {
-              return chartLegendLabel(context.label, context.raw, result);
-            },
-          },
-        },
+        legend: buildChartLegendConfig(result, palette),
+        tooltip: buildChartTooltipConfig(result),
       },
     },
   });
@@ -926,6 +912,55 @@ async function runPrediction(event) {
   }
 }
 
+function buildTuningSummaryMessage(result) {
+  const tuningSummary = result?.tuning_summary || {};
+  const tunedModels = Object.entries(tuningSummary).filter(([, details]) => details?.was_tuned);
+  const reasons = tunedModels.map(([modelName, details]) => {
+    const baseScore = details?.baseline_cv_score;
+    const tunedScore = details?.tuned_cv_score;
+    if (details?.was_improved) {
+      return `${modelName} was tuned and kept because its 3-fold CV score improved from ${baseScore} to ${tunedScore}.`;
+    }
+    return `${modelName} was tuned but not kept because the tuned CV score did not improve beyond the baseline.`;
+  });
+
+  const skipped = Object.entries(tuningSummary)
+    .filter(([, details]) => !details?.was_tuned)
+    .map(([modelName, details]) => `${modelName}: ${details?.reason || details?.skip_reason || 'No tuning performed.'}`);
+
+  if (reasons.length === 0 && skipped.length === 0) {
+    return 'Hyperparameter tuning was not run for this dataset.';
+  }
+
+  return [...reasons, ...skipped].slice(0, 5).join(' ');
+}
+
+function renderSummarySectionMap(sourceMap, title, icon) {
+  if (!sourceMap || typeof sourceMap !== 'object' || !Object.keys(sourceMap).length) {
+    return '';
+  }
+
+  let rows = '';
+  for (const [name, value] of Object.entries(sourceMap)) {
+    if (Array.isArray(value) && value.length) {
+      rows += `<div class="mb-2"><strong class="small">${escapeHtml(name)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${value.map(item => `<span class="prep-tag">${escapeHtml(String(item))}</span>`).join('')}</div></div>`;
+    } else if (typeof value === 'string') {
+      rows += `<div class="mb-2"><strong class="small">${escapeHtml(name)}</strong>: ${escapeHtml(value)}</div>`;
+    }
+  }
+
+  if (!rows) {
+    rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(sourceMap, null, 2))}</pre>`;
+  }
+
+  return `
+    <div class="mb-2">
+      <strong class="small">${escapeHtml(title)}</strong>
+      <div class="mt-2">${rows}</div>
+    </div>
+  `;
+}
+
 function renderPreprocessingSummary(result) {
   const section = document.getElementById('preprocessingSection');
   const content = document.getElementById('preprocessingContent');
@@ -935,7 +970,6 @@ function renderPreprocessingSummary(result) {
   const ds = result.dataset || {};
   const items = [];
 
-  // 1. Dropped columns
   const dropped = ds.dropped_columns || [];
   if (dropped.length) {
     items.push({
@@ -945,7 +979,6 @@ function renderPreprocessingSummary(result) {
     });
   }
 
-  // 2. Duplicate rows
   const dupes = ds.duplicate_rows_removed || 0;
   if (dupes > 0) {
     items.push({
@@ -955,52 +988,48 @@ function renderPreprocessingSummary(result) {
     });
   }
 
-  // 3. Missing values filled
   const mvr = prep.missing_value_report;
   if (mvr && typeof mvr === 'object' && Object.keys(mvr).length) {
-    let rows = '';
-    for (const [strategy, cols] of Object.entries(mvr)) {
-      if (Array.isArray(cols) && cols.length) {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(strategy)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
-      } else if (typeof cols === 'string') {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(strategy)}</strong>: ${escapeHtml(cols)}</div>`;
-      }
-    }
-    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(mvr, null, 2))}</pre>`;
-    items.push({ title: 'Missing Values Filled', icon: '🔧', body: rows });
+    items.push({ title: 'Missing Values Filled', icon: '🔧', body: renderSummarySectionMap(mvr, 'Missing Values Filled', '🔧') });
   }
 
-  // 4. Encoding
   const enc = prep.encoding_report;
   if (enc && typeof enc === 'object' && Object.keys(enc).length) {
-    let rows = '';
-    for (const [method, cols] of Object.entries(enc)) {
-      if (Array.isArray(cols) && cols.length) {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
-      } else if (typeof cols === 'string') {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong>: ${escapeHtml(cols)}</div>`;
-      }
-    }
-    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(enc, null, 2))}</pre>`;
-    items.push({ title: 'Encoding Applied', icon: '🏷️', body: rows });
+    items.push({ title: 'Encoding Applied', icon: '🏷️', body: renderSummarySectionMap(enc, 'Encoding Applied', '🏷️') });
   }
 
-  // 5. Feature selection
   const feat = prep.feature_report;
   if (feat && typeof feat === 'object' && Object.keys(feat).length) {
-    let rows = '';
-    for (const [method, cols] of Object.entries(feat)) {
-      if (Array.isArray(cols) && cols.length) {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong><div class="d-flex flex-wrap gap-1 mt-1">${cols.map(c => `<span class="prep-tag">${escapeHtml(String(c))}</span>`).join('')}</div></div>`;
-      } else if (typeof cols === 'string') {
-        rows += `<div class="mb-2"><strong class="small">${escapeHtml(method)}</strong>: ${escapeHtml(cols)}</div>`;
-      }
-    }
-    if (!rows) rows = `<pre class="small mb-0" style="color:var(--text);white-space:pre-wrap">${escapeHtml(JSON.stringify(feat, null, 2))}</pre>`;
-    items.push({ title: 'Feature Selection', icon: '🎯', body: rows });
+    items.push({ title: 'Feature Selection', icon: '🎯', body: renderSummarySectionMap(feat, 'Feature Selection', '🎯') });
   }
 
-  // 6. Warnings
+  // 6. Hyperparameter tuning summary
+  const tuningSummary = result.tuning_summary || {};
+  if (Object.keys(tuningSummary).length) {
+    const tuningRows = Object.entries(tuningSummary)
+      .map(([modelName, details]) => {
+        const reason = details?.reason || details?.skip_reason || 'No tuning reason provided.';
+        const badge = details?.was_tuned
+          ? (details?.was_improved ? 'Tuned and kept' : 'Tuned but not kept')
+          : 'Skipped';
+        return `
+          <div class="mb-2">
+            <strong class="small">${escapeHtml(modelName)}</strong>
+            <span class="badge rounded-pill bg-light text-dark ms-2">${escapeHtml(badge)}</span>
+            <div class="small text-secondary mt-1">${escapeHtml(reason)}</div>
+          </div>
+        `;
+      })
+      .join('');
+
+    items.push({
+      title: 'Hyperparameter tuning',
+      icon: '⚙️',
+      body: tuningRows,
+    });
+  }
+
+  // 7. Warnings
   const warns = prep.warnings || [];
   if (warns.length) {
     items.push({
@@ -1097,14 +1126,19 @@ function renderResult(result) {
     if (predEl) revealSection(predEl, { up: ['.panel-card'] });
   });
 
-  // show preprocessing warnings if any
+  // show preprocessing warnings and tuning reasoning after pipeline output
   try {
     const warnings = result.preprocessing && result.preprocessing.warnings;
+    const tuningMessage = buildTuningSummaryMessage(result);
+    const statusMessage = warnings && warnings.length
+      ? `${warnings.join('\n')}\n${tuningMessage}`
+      : tuningMessage;
+
     if (warnings && warnings.length) {
-      setStatus(warnings.join('\n'), 'warning');
-      showToast('Pipeline completed with preprocessing warnings.', 'warning');
+      setStatus(statusMessage, 'warning', 100);
+      showToast('Pipeline completed with preprocessing warnings and tuning notes.', 'warning');
     } else {
-      setStatus('Pipeline completed successfully.', 'success', 100);
+      setStatus(statusMessage, 'success', 100);
       showToast('Pipeline completed successfully. Downloads are ready.', 'success');
     }
   } catch (e) {
@@ -1127,8 +1161,8 @@ async function runPipeline(event) {
   // Re-check file size before uploading
   if (file.size > MAX_FILE_SIZE) {
     const sizeMB = bytesToMB(file.size).toFixed(1);
-    setStatus(`File too large. Your file is ${sizeMB} MB. The maximum allowed size is 20 MB.`, 'error');
-    showToast(`File too large (${sizeMB} MB). Maximum is 20 MB.`, 'danger');
+    setStatus(`File too large. Your file is ${sizeMB} MB. The maximum allowed size is 10 MB.`, 'error');
+    showToast(`File too large (${sizeMB} MB). Maximum is 10 MB.`, 'danger');
     return;
   }
 
@@ -1186,7 +1220,7 @@ datasetFileInput.addEventListener('change', function () {
 
   // Validate file size
   if (file.size > MAX_FILE_SIZE) {
-    const msg = `File too large. Your file is ${sizeMB} MB. The maximum allowed size is 20 MB.`;
+    const msg = `File too large. Your file is ${sizeMB} MB. The maximum allowed size is 10 MB.`;
     if (fileErrorEl) { fileErrorEl.textContent = msg; fileErrorEl.classList.remove('d-none'); }
     runButton.disabled = true;
     return;
