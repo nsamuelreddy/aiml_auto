@@ -314,10 +314,10 @@ HTML = """
         <h3>Dataset file</h3>
         <div class="field file-wrap">
           <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json" style="display:none;" />
-          <div class="fake-file" id="fileDropZone">
+          <label for="fileInput" class="fake-file" id="fileDropZone">
             <span id="fileName">No file selected</span>
             <span class="choose-btn">Choose File</span>
-          </div>
+          </label>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
         <div class="status" id="uploadStatus" style="display:none; margin-top:8px; padding:8px 12px; font-size:.85rem;"></div>
@@ -400,10 +400,6 @@ HTML = """
     const progressBar = document.getElementById('progressBar');
     const trainBtn = document.getElementById('trainBtn');
     const predictBtn = document.getElementById('predictBtn');
-
-    fileDropZone.addEventListener('click', () => {
-      fileInput.click();
-    });
 
     fileDropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
