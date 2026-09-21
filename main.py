@@ -80,15 +80,18 @@ HTML = """
     .field { margin-top: 14px; }
     .label { display:block; font-size: .8rem; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
     .file-wrap { position: relative; }
+    .file-wrap input[type=file] {
+      position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;
+    }
     .fake-file {
       display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 16px; border-radius: 12px;
       border: 1px solid var(--line); background: rgba(255,255,255,0.7); color: var(--text); font-weight: 700;
-      cursor: pointer; user-select: none; transition: .2s ease;
+      transition: .2s ease;
     }
-    .fake-file:hover, .fake-file.dragover { border-color: var(--primary); box-shadow: 0 10px 24px rgba(105,87,245,0.12); background: rgba(255,255,255,0.9); }
+    .fake-file:hover { border-color: var(--primary); box-shadow: 0 10px 24px rgba(105,87,245,0.08); }
     .choose-btn {
       background: linear-gradient(135deg, var(--primary), var(--primary-2)); border: none; color: white;
-      border-radius: 10px; padding: 8px 14px; font-weight: 700; cursor: pointer; pointer-events: none;
+      border-radius: 10px; padding: 8px 14px; font-weight: 700; cursor: pointer;
     }
     select, input[type=text] {
       width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,0.7);
@@ -313,14 +316,10 @@ HTML = """
       <div class="panel">
         <h3>Dataset file</h3>
         <div class="field file-wrap">
-          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json" style="display:none;" />
-          <label for="fileInput" class="fake-file" id="fileDropZone">
-            <span id="fileName">No file selected</span>
-            <span class="choose-btn">Choose File</span>
-          </label>
+          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json" />
+          <div class="fake-file"><span id="fileName">No file selected</span><button class="choose-btn" type="button">Choose File</button></div>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
-        <div class="status" id="uploadStatus" style="display:none; margin-top:8px; padding:8px 12px; font-size:.85rem;"></div>
 
         <div class="field">
           <label class="label" for="target">Target column</label>
@@ -377,12 +376,10 @@ HTML = """
   </div>
 
   <script>
-    const state = { result: null, file: null, file_id: null };
+    const state = { result: null, file: null };
 
     const fileInput = document.getElementById('fileInput');
-    const fileDropZone = document.getElementById('fileDropZone');
     const fileName = document.getElementById('fileName');
-    const uploadStatus = document.getElementById('uploadStatus');
     const targetInput = document.getElementById('target');
     const metrics = document.getElementById('metrics');
     const results = document.getElementById('results');
@@ -401,88 +398,42 @@ HTML = """
     const trainBtn = document.getElementById('trainBtn');
     const predictBtn = document.getElementById('predictBtn');
 
-    fileDropZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      fileDropZone.classList.add('dragover');
-    });
-
-    fileDropZone.addEventListener('dragleave', () => {
-      fileDropZone.classList.remove('dragover');
-    });
-
-    fileDropZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      fileDropZone.classList.remove('dragover');
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        fileInput.files = e.dataTransfer.files;
-        handleFileSelection();
-      }
-    });
-
-    fileInput.addEventListener('change', () => {
-      handleFileSelection();
-    });
-
-    async function handleFileSelection() {
+    fileInput.addEventListener('change', async () => {
       state.file = fileInput.files[0];
+      fileName.textContent = state.file ? state.file.name : 'No file selected';
       if (!state.file) return;
-
-      fileName.textContent = state.file.name;
-      uploadStatus.style.display = 'block';
-      uploadStatus.style.background = 'rgba(105,87,245,0.08)';
-      uploadStatus.style.color = 'var(--primary)';
-      uploadStatus.style.borderColor = 'rgba(105,87,245,0.2)';
-      uploadStatus.innerHTML = '⏳ Uploading & analyzing dataset...';
-
+      const fd = new FormData(); fd.append('file', state.file);
       try {
-        const uploadFd = new FormData();
-        uploadFd.append('file', state.file);
-        const res = await fetch('/api/upload', { method: 'POST', body: uploadFd });
-        const data = await res.json();
-
+        const res = await fetch('/api/columns', { method: 'POST', body: fd });
         if (!res.ok) {
-          uploadStatus.style.background = 'rgba(239,68,68,0.1)';
-          uploadStatus.style.color = '#dc2626';
-          uploadStatus.style.borderColor = 'rgba(239,68,68,0.25)';
-          uploadStatus.innerHTML = '❌ ' + (data?.detail || 'Failed to upload dataset.');
-          return;
+          const err = await res.json().catch(() => ({}));
+          return alert('Could not read file columns: ' + (err.detail || res.statusText));
         }
-
-        state.file_id = data.file_id;
-        const cols = data.columns || [];
+        const cols = await res.json();
         targetInput.innerHTML = cols.map((c, index) => `<option value="${c}"${index === cols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
         if (cols.length) targetInput.selectedIndex = cols.length - 1;
-
-        uploadStatus.style.background = 'rgba(29,191,115,0.08)';
-        uploadStatus.style.color = '#0f8d56';
-        uploadStatus.style.borderColor = 'rgba(29,191,115,0.25)';
-        uploadStatus.innerHTML = `✓ Uploaded: <strong>${data.filename}</strong> (${cols.length} columns). Select target and click Run!`;
-
-        if (data.preview && data.preview.length) {
-          renderPreview(data.preview);
-          results.classList.add('show');
-        }
-      } catch (err) {
-        uploadStatus.style.background = 'rgba(239,68,68,0.1)';
-        uploadStatus.style.color = '#dc2626';
-        uploadStatus.style.borderColor = 'rgba(239,68,68,0.25)';
-        uploadStatus.innerHTML = '❌ Network error while uploading file.';
+      } catch (e) {
+        alert('Network error reading file: ' + e.message);
       }
-    }
+    });
 
     trainBtn.addEventListener('click', async () => {
-      if (!state.file_id) {
-        if (!state.file) {
-          return alert('Please choose a dataset first.');
-        }
-        return alert('Please wait for the file to finish uploading.');
+      if (!state.file) return alert('Please choose a dataset first.');
+      // Upload the file first so we can stream training progress via SSE
+      const uploadFd = new FormData();
+      uploadFd.append('file', state.file);
+      const up = await fetch('/api/upload', { method: 'POST', body: uploadFd });
+      if (!up.ok) {
+        const err = await up.json().catch(() => ({}));
+        return alert('Upload failed: ' + (err.detail || up.statusText));
       }
+      const { file_id } = await up.json();
 
       statusBox.classList.add('show');
       statusBox.innerHTML = 'Starting pipeline...';
       progressBar.style.width = '4%';
 
-      const es = new EventSource(`/api/train-stream?file_id=${encodeURIComponent(state.file_id)}&target=${encodeURIComponent(targetInput.value || '')}`);
+      const es = new EventSource(`/api/train-stream?file_id=${encodeURIComponent(file_id)}&target=${encodeURIComponent(targetInput.value || '')}`);
       es.addEventListener('progress', (e) => {
         try {
           const payload = JSON.parse(e.data);
@@ -677,15 +628,7 @@ async def detect_columns(file: UploadFile = File(...)):
         tmp.write(raw)
         path = tmp.name
     try:
-        if suffix in {'.csv', ''}:
-            try:
-                df = pd.read_csv(path, nrows=5)
-            except UnicodeDecodeError:
-                df = pd.read_csv(path, encoding='latin-1', nrows=5)
-        elif suffix == '.json':
-            df = pd.read_json(path)
-        else:
-            df = pd.read_excel(path, nrows=5)
+        df = pd.read_csv(path) if suffix in {'.csv', ''} else pd.read_excel(path)
         return JSONResponse(content=[str(c) for c in df.columns])
     except Exception as e:
         return JSONResponse(content={'detail': f'Error reading columns: {str(e)}'}, status_code=400)
@@ -696,34 +639,13 @@ async def detect_columns(file: UploadFile = File(...)):
 
 @app.post('/api/upload')
 async def upload_file(file: UploadFile = File(...)):
-    try:
-        suffix = Path(file.filename or 'data.csv').suffix.lower() or '.csv'
-        file_id = str(uuid.uuid4())
-        dest = UPLOAD_DIR / f"{file_id}{suffix}"
-        raw = await file.read()
-        with open(dest, 'wb') as f:
-            f.write(raw)
-
-        if suffix in {'.csv', ''}:
-            try:
-                df = pd.read_csv(dest, nrows=5)
-            except UnicodeDecodeError:
-                df = pd.read_csv(dest, encoding='latin-1', nrows=5)
-        elif suffix == '.json':
-            df = pd.read_json(dest)
-        else:
-            df = pd.read_excel(dest, nrows=5)
-
-        columns = [str(c) for c in df.columns]
-        preview = df.head(5).fillna("").to_dict(orient="records")
-        return JSONResponse({
-            'file_id': file_id,
-            'filename': file.filename or 'data.csv',
-            'columns': columns,
-            'preview': preview
-        })
-    except Exception as e:
-        return JSONResponse({'detail': f'Failed to process file: {str(e)}'}, status_code=400)
+    suffix = Path(file.filename or 'data.csv').suffix.lower() or '.csv'
+    file_id = str(uuid.uuid4())
+    dest = UPLOAD_DIR / f"{file_id}{suffix}"
+    raw = await file.read()
+    with open(dest, 'wb') as f:
+        f.write(raw)
+    return JSONResponse({'file_id': file_id})
 
 
 @app.get('/api/train-stream')
