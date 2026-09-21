@@ -253,22 +253,55 @@ if "result" in st.session_state:
             if not chart_df.empty:
                 chart_df["Value"] = pd.to_numeric(chart_df["Value"], errors="coerce")
                 min_value, max_value = float(chart_df["Value"].min()), float(chart_df["Value"].max())
-                x_axis = alt.X("Model:N", sort=None, title=None, axis=alt.Axis(labelColor="#e2e8f0", labelAngle=-45, labelFontSize=12, labelFontWeight=600, labelPadding=8))
-                bars = alt.Chart(chart_df).mark_bar(opacity=0.92, stroke="rgba(15, 23, 42, 0.8)", strokeWidth=1).encode(x=x_axis, y=alt.Y("Value:Q", title=result.get("primary_metric", "Accuracy"), axis=alt.Axis(labelColor="#e2e8f0", titleColor="#94a3b8"), scale=alt.Scale(domain=[max(0.0, min_value - 0.05), max(1.0, max_value + 0.05)])), color=alt.Color("Model:N", legend=None, scale=alt.Scale(range=["#7dd3fc", "#34d399", "#fbbf24", "#fca5a5", "#c4b5fd", "#a5b4fc", "#f9a8d4", "#fdba74"])), tooltip=["Model:N", "Value:Q"]).properties(height=280)
-                labels = alt.Chart(chart_df).mark_text(dy=-8, color="#ffffff", fontSize=11, fontWeight=700).encode(x=alt.X("Model:N", sort=None, title=None), y=alt.Y("Value:Q", axis=None), text=alt.Text("Value:Q", format=".4f"))
-                chart = (bars + labels).properties(padding={"bottom": 100})
-                st.altair_chart(chart, use_container_width=True)
+                bars = alt.Chart(chart_df).mark_bar(opacity=0.92, cornerRadiusTopRight=6, cornerRadiusBottomRight=6).encode(
+                    y=alt.Y("Model:N", sort="-x", title=None,
+                            axis=alt.Axis(labelColor="#e2e8f0", labelFontSize=12, labelFontWeight=600, labelLimit=220)),
+                    x=alt.X("Value:Q", title=result.get("primary_metric", "Accuracy"),
+                            axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8"),
+                            scale=alt.Scale(domain=[max(0.0, min_value - 0.05), max(1.0, max_value + 0.05)])),
+                    color=alt.Color("Model:N", legend=None, scale=alt.Scale(
+                        range=["#7dd3fc","#34d399","#fbbf24","#fca5a5","#c4b5fd","#a5b4fc","#f9a8d4","#fdba74"])),
+                    tooltip=["Model:N", "Value:Q"]
+                ).properties(height=max(240, len(chart_df) * 38))
+                value_labels = alt.Chart(chart_df).mark_text(dx=6, align="left", color="#e2e8f0", fontSize=11, fontWeight=700).encode(
+                    y=alt.Y("Model:N", sort="-x"),
+                    x=alt.X("Value:Q"),
+                    text=alt.Text("Value:Q", format=".4f")
+                )
+                st.altair_chart(bars + value_labels, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
         feature_importance = result.get("feature_importance", {})
         if feature_importance:
-            st.markdown("### Feature importance")
-            model_name = next(iter(feature_importance)); rows = feature_importance[model_name]
-            if rows:
-                feature_df = pd.DataFrame(rows); chart_data = feature_df.set_index("feature")["importance"]
-                if chart_data.nunique() > 1:
-                    ratio = chart_data.max() / chart_data.min() if chart_data.min() > 0 else 1
-                    if ratio < 3: chart_data = (chart_data - chart_data.min()) / (chart_data.max() - chart_data.min() + 1e-9) * 100
-                st.bar_chart(chart_data)
+            fi_models = list(feature_importance.keys())
+            st.markdown("""
+                <div style="margin:1.5rem 0 0.5rem 0">
+                    <div style="font-size:0.75rem;color:#60a5fa;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.3rem">Model Interpretability</div>
+                    <div style="font-size:1.4rem;font-weight:800;color:#f8fafc;letter-spacing:-0.01em">Feature Importance Highlights</div>
+                </div>
+            """, unsafe_allow_html=True)
+            sel_col, info_col = st.columns([1, 2], gap="small", vertical_alignment="center")
+            with sel_col:
+                selected_fi_model = st.selectbox("Model", fi_models, label_visibility="collapsed", key="fi_model_select")
+            with info_col:
+                st.markdown(f"<span style='color:#94a3b8;font-size:0.9rem'>Showing feature importance for <strong style='color:#e2e8f0'>{selected_fi_model}</strong></span>", unsafe_allow_html=True)
+            fi_rows = feature_importance.get(selected_fi_model, [])
+            if fi_rows:
+                fi_df = pd.DataFrame(fi_rows)
+                fi_df["importance"] = pd.to_numeric(fi_df["importance"], errors="coerce").fillna(0)
+                fi_df = fi_df.sort_values("importance", ascending=False).head(15)
+                max_imp = fi_df["importance"].max()
+                if max_imp > 0:
+                    fi_df["pct"] = fi_df["importance"] / max_imp * 100
+                else:
+                    fi_df["pct"] = fi_df["importance"]
+                h_chart = alt.Chart(fi_df).mark_bar(
+                    color="#818cf8", cornerRadiusTopRight=6, cornerRadiusBottomRight=6
+                ).encode(
+                    y=alt.Y("feature:N", sort="-x", title=None, axis=alt.Axis(labelColor="#e2e8f0", labelFontSize=12, labelFontWeight=500)),
+                    x=alt.X("pct:Q", title="Relative Importance (%)", axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", format=".1f")),
+                    tooltip=[alt.Tooltip("feature:N", title="Feature"), alt.Tooltip("importance:Q", title="Importance", format=".4f")]
+                ).properties(height=max(200, len(fi_df) * 36))
+                st.altair_chart(h_chart, use_container_width=True)
     with tabs[1]: _render_preprocessing(result.get("preprocessing", {}))
     with tabs[2]:
         tuning_summary = result.get("tuning_summary", {})
