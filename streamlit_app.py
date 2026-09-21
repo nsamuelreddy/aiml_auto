@@ -258,7 +258,7 @@ if "result" in st.session_state:
                             axis=alt.Axis(labelColor="#e2e8f0", labelFontSize=12, labelFontWeight=600, labelLimit=220)),
                     x=alt.X("Value:Q", title=result.get("primary_metric", "Accuracy"),
                             axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8"),
-                            scale=alt.Scale(domain=[max(0.0, min_value - 0.05), max(1.0, max_value + 0.05)])),
+                            scale=alt.Scale(domain=[0, min(1.0, max_value + 0.02)])),
                     color=alt.Color("Model:N", legend=None, scale=alt.Scale(
                         range=["#7dd3fc","#34d399","#fbbf24","#fca5a5","#c4b5fd","#a5b4fc","#f9a8d4","#fdba74"])),
                     tooltip=["Model:N", "Value:Q"]
