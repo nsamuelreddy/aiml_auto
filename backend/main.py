@@ -188,6 +188,7 @@ def _build_pipeline_result(
 ) -> dict[str, Any]:
     _emit_progress(progress_callback, 2, "Loading dataset")
     original_df = load_dataset(file_path)
+    data_preview = original_df.head(5).to_dict(orient="records")
 
     # In production (Render free tier), downsample large datasets to 10,000 rows
     # to stay safely within the 512MB RAM limit and prevent OOM restarts.
@@ -233,7 +234,7 @@ def _build_pipeline_result(
     df = remove_empty_columns(df)
 
     _emit_progress(progress_callback, 22, "Dropping irrelevant columns")
-    df, dropped_columns = drop_irrelevant_columns(df)
+    df, dropped_columns, dropped_column_reasons = drop_irrelevant_columns(df)
 
     _emit_progress(progress_callback, 28, "Filling missing values")
     df, numerical_report = fill_numerical_missing(df)
@@ -252,6 +253,21 @@ def _build_pipeline_result(
 
     _emit_progress(progress_callback, 54, "Scaling features")
     x, scaling_report, scaler = standard_scale(x)
+
+    correlation_matrix = x.select_dtypes(include=np.number).corr().abs()
+    correlation_pairs: list[dict[str, Any]] = []
+    if not correlation_matrix.empty:
+        cols = list(correlation_matrix.columns)
+        for i in range(len(cols)):
+            for j in range(i + 1, len(cols)):
+                value = correlation_matrix.iloc[i, j]
+                if pd.notna(value):
+                    correlation_pairs.append({
+                        "feature_a": cols[i],
+                        "feature_b": cols[j],
+                        "correlation": float(value),
+                    })
+        correlation_pairs = sorted(correlation_pairs, key=lambda item: item["correlation"], reverse=True)[:10]
 
     _emit_progress(progress_callback, 60, "Selecting features")
     x, variance_report = variance_threshold_selection(x)
@@ -371,7 +387,10 @@ def _build_pipeline_result(
             "missing_values_total": int(original_df.isna().sum().sum()),
             "column_names": df.columns.tolist(),
             "dropped_columns": dropped_columns,
+            "dropped_column_reasons": dropped_column_reasons,
             "duplicate_rows_removed": int(duplicate_rows),
+            "preview": _to_serializable(data_preview),
+            "correlation_pairs": correlation_pairs,
         },
         "preprocessing": {
             "missing_value_report": _to_serializable(missing_report),
