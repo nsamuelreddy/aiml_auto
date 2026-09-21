@@ -11,25 +11,15 @@ def load_dataset(file_path):
     start = time.time()
 
     if extension == ".csv":
-        try:
-            df = pd.read_csv(
-                file_path,
-                low_memory=True
-            )
-        except UnicodeDecodeError:
-            df = pd.read_csv(
-                file_path,
-                encoding="latin-1",
-                low_memory=True
-            )
+
+        df = pd.read_csv(
+            file_path,
+            low_memory=True
+        )
 
     elif extension in [".xls", ".xlsx"]:
 
         df = pd.read_excel(file_path)
-
-    elif extension == ".json":
-
-        df = pd.read_json(file_path)
 
     else:
         raise ValueError("Unsupported file format")

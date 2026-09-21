@@ -315,9 +315,9 @@ HTML = """
 
       <div class="panel">
         <h3>Dataset file</h3>
-        <div class="field file-wrap">
-          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json" />
-          <div class="fake-file"><span id="fileName">No file selected</span><button class="choose-btn" type="button">Choose File</button></div>
+        <div class="field">
+          <input id="fileInput" type="file" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.85); font-size:1rem; cursor:pointer;" />
+          <div id="fileNotice" style="margin-top:6px; font-size:.85rem; font-weight:700;"></div>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
 
@@ -379,7 +379,7 @@ HTML = """
     const state = { result: null, file: null };
 
     const fileInput = document.getElementById('fileInput');
-    const fileName = document.getElementById('fileName');
+    const fileNotice = document.getElementById('fileNotice');
     const targetInput = document.getElementById('target');
     const metrics = document.getElementById('metrics');
     const results = document.getElementById('results');
@@ -399,20 +399,40 @@ HTML = """
     const predictBtn = document.getElementById('predictBtn');
 
     fileInput.addEventListener('change', async () => {
-      state.file = fileInput.files[0];
-      fileName.textContent = state.file ? state.file.name : 'No file selected';
-      if (!state.file) return;
-      const fd = new FormData(); fd.append('file', state.file);
+      const file = fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+      state.file = file;
+      if (!file) {
+        if (fileNotice) fileNotice.textContent = '';
+        return;
+      }
+      if (fileNotice) {
+        fileNotice.style.color = 'var(--primary)';
+        fileNotice.textContent = '⏳ Reading columns from ' + file.name + '...';
+      }
+      const fd = new FormData(); fd.append('file', file);
       try {
         const res = await fetch('/api/columns', { method: 'POST', body: fd });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          return alert('Could not read file columns: ' + (err.detail || res.statusText));
+          const msg = err.detail || res.statusText || 'Failed to read file';
+          if (fileNotice) {
+            fileNotice.style.color = '#dc2626';
+            fileNotice.textContent = '❌ Error: ' + msg;
+          }
+          return alert('Could not read file columns: ' + msg);
         }
         const cols = await res.json();
         targetInput.innerHTML = cols.map((c, index) => `<option value="${c}"${index === cols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
         if (cols.length) targetInput.selectedIndex = cols.length - 1;
+        if (fileNotice) {
+          fileNotice.style.color = '#0f8d56';
+          fileNotice.textContent = '✓ ' + file.name + ' ready (' + cols.length + ' columns). Click Run AutoML Pipeline!';
+        }
       } catch (e) {
+        if (fileNotice) {
+          fileNotice.style.color = '#dc2626';
+          fileNotice.textContent = '❌ Network error: ' + e.message;
+        }
         alert('Network error reading file: ' + e.message);
       }
     });
