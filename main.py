@@ -317,7 +317,7 @@ HTML = """
         <h3>Dataset file</h3>
         <div class="field">
           <input id="fileInput" type="file" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.85); font-size:1rem; cursor:pointer;" />
-          <div id="fileNotice" style="margin-top:6px; font-size:.85rem; font-weight:700;"></div>
+          <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:rgba(105,87,245,0.08); display:none;"></div>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
 
@@ -398,62 +398,84 @@ HTML = """
     const trainBtn = document.getElementById('trainBtn');
     const predictBtn = document.getElementById('predictBtn');
 
-    fileInput.addEventListener('change', async () => {
+    async function onFileSelected() {
       const file = fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
-      state.file = file;
       if (!file) {
-        if (fileNotice) fileNotice.textContent = '';
+        if (fileNotice) { fileNotice.style.display = 'none'; fileNotice.textContent = ''; }
         return;
       }
+      state.file = file;
+
       if (fileNotice) {
+        fileNotice.style.display = 'block';
+        fileNotice.style.background = 'rgba(105,87,245,0.08)';
         fileNotice.style.color = 'var(--primary)';
-        fileNotice.textContent = '⏳ Reading columns from ' + file.name + '...';
+        fileNotice.innerHTML = '⏳ <strong>Uploading & analyzing ' + file.name + '...</strong>';
       }
-      const fd = new FormData(); fd.append('file', file);
+
+      const fd = new FormData();
+      fd.append('file', file);
+
       try {
-        const res = await fetch('/api/columns', { method: 'POST', body: fd });
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          const msg = err.detail || res.statusText || 'Failed to read file';
+          const msg = err.detail || res.statusText || 'Upload failed';
           if (fileNotice) {
+            fileNotice.style.display = 'block';
+            fileNotice.style.background = 'rgba(239,68,68,0.1)';
             fileNotice.style.color = '#dc2626';
-            fileNotice.textContent = '❌ Error: ' + msg;
+            fileNotice.innerHTML = '❌ <strong>Upload error:</strong> ' + msg;
           }
-          return alert('Could not read file columns: ' + msg);
+          return;
         }
-        const cols = await res.json();
+        const data = await res.json();
+        state.file_id = data.file_id;
+        const cols = data.columns || [];
         targetInput.innerHTML = cols.map((c, index) => `<option value="${c}"${index === cols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
         if (cols.length) targetInput.selectedIndex = cols.length - 1;
+
         if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(29,191,115,0.1)';
           fileNotice.style.color = '#0f8d56';
-          fileNotice.textContent = '✓ ' + file.name + ' ready (' + cols.length + ' columns). Click Run AutoML Pipeline!';
+          fileNotice.innerHTML = '✓ <strong>' + (data.filename || file.name) + ' uploaded!</strong> (' + cols.length + ' columns detected). Ready to run pipeline.';
         }
       } catch (e) {
         if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(239,68,68,0.1)';
           fileNotice.style.color = '#dc2626';
-          fileNotice.textContent = '❌ Network error: ' + e.message;
+          fileNotice.innerHTML = '❌ <strong>Network error:</strong> ' + e.message;
         }
-        alert('Network error reading file: ' + e.message);
       }
-    });
+    }
+
+    fileInput.addEventListener('change', onFileSelected);
+    fileInput.addEventListener('input', onFileSelected);
 
     trainBtn.addEventListener('click', async () => {
-      if (!state.file) return alert('Please choose a dataset first.');
-      // Upload the file first so we can stream training progress via SSE
-      const uploadFd = new FormData();
-      uploadFd.append('file', state.file);
-      const up = await fetch('/api/upload', { method: 'POST', body: uploadFd });
-      if (!up.ok) {
-        const err = await up.json().catch(() => ({}));
-        return alert('Upload failed: ' + (err.detail || up.statusText));
+      let fileId = state.file_id;
+      if (!fileId) {
+        const file = state.file || (fileInput.files && fileInput.files[0]);
+        if (!file) return alert('Please choose a dataset first.');
+        const uploadFd = new FormData();
+        uploadFd.append('file', file);
+        const up = await fetch('/api/upload', { method: 'POST', body: uploadFd });
+        if (!up.ok) {
+          const err = await up.json().catch(() => ({}));
+          return alert('Upload failed: ' + (err.detail || up.statusText));
+        }
+        const upData = await up.json();
+        fileId = upData.file_id;
+        state.file_id = fileId;
       }
-      const { file_id } = await up.json();
 
       statusBox.classList.add('show');
       statusBox.innerHTML = 'Starting pipeline...';
       progressBar.style.width = '4%';
 
-      const es = new EventSource(`/api/train-stream?file_id=${encodeURIComponent(file_id)}&target=${encodeURIComponent(targetInput.value || '')}`);
+      const es = new EventSource(`/api/train-stream?file_id=${encodeURIComponent(fileId)}&target=${encodeURIComponent(targetInput.value || '')}`);
       es.addEventListener('progress', (e) => {
         try {
           const payload = JSON.parse(e.data);
@@ -665,7 +687,12 @@ async def upload_file(file: UploadFile = File(...)):
     raw = await file.read()
     with open(dest, 'wb') as f:
         f.write(raw)
-    return JSONResponse({'file_id': file_id})
+    try:
+        df = pd.read_csv(dest) if suffix in {'.csv', ''} else pd.read_excel(dest)
+        columns = [str(c).strip() for c in df.columns]
+    except Exception:
+        columns = []
+    return JSONResponse({'file_id': file_id, 'filename': file.filename or 'data.csv', 'columns': columns})
 
 
 @app.get('/api/train-stream')
