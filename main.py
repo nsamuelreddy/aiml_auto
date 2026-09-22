@@ -563,7 +563,10 @@ HTML = """
         state.file_id = fileId;
       }
 
+      state.result = null;
       statusBox.classList.add('show');
+      statusBox.style.background = '';
+      statusBox.style.color = '';
       statusBox.innerHTML = 'Starting pipeline...';
       progressBar.style.width = '4%';
 
@@ -579,21 +582,25 @@ HTML = """
       });
       es.addEventListener('result', (e) => {
         try {
+          es.close();
           const payload = JSON.parse(e.data);
           state.result = payload;
           renderPreview(payload.dataset?.preview || []);
           renderMetrics(payload.summary || payload.dashboard_summary || {});
           renderResults(payload);
           renderFeatureFields(payload.feature_names || payload.selected_feature_names || []);
-          statusBox.innerHTML = 'Pipeline completed successfully. <span id="statusPct">100%</span>';
+          statusBox.innerHTML = '✓ Pipeline completed successfully. <span id="statusPct">100%</span>';
+          statusBox.style.background = 'rgba(29,191,115,0.1)';
+          statusBox.style.color = '#0f8d56';
           progressBar.style.width = '100%';
-          // show navigation bar only after we have results
           document.getElementById('topNav').style.display = 'flex';
         } catch (err) {
           console.error('Bad result event', err);
         }
       });
       es.addEventListener('error', (e) => {
+        es.close();
+        if (state.result) return;
         let msg = 'Pipeline failed or disconnected.';
         try {
           if (e.data) {
@@ -605,7 +612,6 @@ HTML = """
         statusBox.style.background = 'rgba(239,68,68,0.1)';
         statusBox.style.color = '#dc2626';
         console.error('SSE error', e);
-        es.close();
       });
     });
 
