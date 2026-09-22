@@ -557,7 +557,7 @@ HTML = """
 
       if (!resp.ok) {
         const detail = data?.detail || 'Prediction request failed.';
-        alert('Prediction error: ' + detail + '\n\nPlease train the model first or re-run the pipeline.');
+        alert('Prediction error: ' + detail + ' - Please train the model first or re-run the pipeline.');
         return;
       }
 
