@@ -190,9 +190,9 @@ def _build_pipeline_result(
     original_df = load_dataset(file_path)
     data_preview = original_df.head(5).to_dict(orient="records")
 
-    # In production (Render free tier), downsample large datasets to 10,000 rows
-    # to stay safely within the 512MB RAM limit and prevent OOM restarts.
-    if os.environ.get("RENDER") == "true" and len(original_df) > 10000:
+    # For large datasets (e.g. adult.csv with 48k rows), downsample to 10,000 rows
+    # to guarantee fast training under 15s and prevent cloud memory limits.
+    if len(original_df) > 10000:
         original_df = original_df.sample(n=10000, random_state=42).reset_index(drop=True)
 
     _emit_progress(progress_callback, 6, "Cleaning column names")

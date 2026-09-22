@@ -594,6 +594,16 @@ HTML = """
         }
       });
       es.addEventListener('error', (e) => {
+        let msg = 'Pipeline failed or disconnected.';
+        try {
+          if (e.data) {
+            const parsed = JSON.parse(e.data);
+            if (parsed.message) msg = parsed.message;
+          }
+        } catch (_) {}
+        statusBox.innerHTML = '❌ <strong>Error:</strong> ' + msg;
+        statusBox.style.background = 'rgba(239,68,68,0.1)';
+        statusBox.style.color = '#dc2626';
         console.error('SSE error', e);
         es.close();
       });
