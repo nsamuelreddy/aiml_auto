@@ -357,15 +357,21 @@ HTML = """
       <div class="results-grid" style="margin-top:24px;">
         <div class="section">
           <h4>Model comparison</h4>
-          <h2>All Models Leaderboard & Metrics</h2>
+          <h2>Top 3 model comparison</h2>
           <div id="comparisonBars"></div>
-          <div class="table-wrap" style="margin-top:16px;"><table id="comparisonTable"></table></div>
         </div>
         <div class="section">
           <h4>Model interpretability</h4>
           <h2>Feature importance highlights</h2>
           <div id="importanceBox"></div>
         </div>
+      </div>
+
+      <div class="section" style="margin-top:24px;">
+        <h4>Comprehensive evaluation</h4>
+        <h2>All Models Performance Leaderboard</h2>
+        <div class="tiny" style="margin-bottom:12px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
+        <div class="table-wrap" style="height:auto; max-height:450px;"><table id="comparisonTable"></table></div>
       </div>
     </section>
 
