@@ -398,6 +398,55 @@ HTML = """
     const trainBtn = document.getElementById('trainBtn');
     const predictBtn = document.getElementById('predictBtn');
 
+    async function parseColumnsLocally(file) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      if (ext === '.csv') {
+        try {
+          const slice = file.slice(0, 8192);
+          const text = await slice.text();
+          const firstLine = text.split(String.fromCharCode(10))[0].replace(String.fromCharCode(13), '');
+          if (firstLine && firstLine.trim().length > 0) {
+            const delim = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',');
+            const cols = [];
+            let cur = '';
+            let inQuotes = false;
+            for (let i = 0; i < firstLine.length; i++) {
+              const ch = firstLine[i];
+              if (ch === '"') {
+                inQuotes = !inQuotes;
+              } else if (ch === delim && !inQuotes) {
+                cols.push(cur.trim().replace(/^["']|["']$/g, ''));
+                cur = '';
+              } else {
+                cur += ch;
+              }
+            }
+            cols.push(cur.trim().replace(/^["']|["']$/g, ''));
+            const clean = cols.filter(c => c.length > 0);
+            if (clean.length > 0) return clean;
+          }
+        } catch (e) {
+          console.warn('Local CSV parse error', e);
+        }
+      } else if (ext === '.json') {
+        try {
+          const slice = file.slice(0, 16384);
+          const text = await slice.text();
+          const trimmed = text.trim();
+          if (trimmed.startsWith('[')) {
+            const endIdx = trimmed.indexOf('}');
+            if (endIdx > 0) {
+              const obj = JSON.parse(trimmed.slice(1, endIdx + 1).trim());
+              return Object.keys(obj);
+            }
+          }
+        } catch (e) {
+          console.warn('Local JSON parse error', e);
+        }
+      }
+      return null;
+    }
+
     async function onFileSelected() {
       const file = fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
       if (!file) {
@@ -437,53 +486,56 @@ HTML = """
 
       state.file = file;
 
-      if (fileNotice) {
+      // Instant client-side column extraction (0 ms)
+      const localCols = await parseColumnsLocally(file);
+      if (localCols && localCols.length > 0) {
+        targetInput.innerHTML = localCols.map((c, index) => `<option value="${c}"${index === localCols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
+        targetInput.selectedIndex = localCols.length - 1;
+        if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(29,191,115,0.08)';
+          fileNotice.style.color = '#0f8d56';
+          fileNotice.innerHTML = '⚡ <strong>' + file.name + ' ready!</strong> (' + localCols.length + ' columns detected instantly). Syncing with server...';
+        }
+      } else if (fileNotice) {
         fileNotice.style.display = 'block';
         fileNotice.style.background = 'rgba(105,87,245,0.08)';
         fileNotice.style.color = 'var(--primary)';
-        fileNotice.innerHTML = '⏳ <strong>Uploading & analyzing ' + file.name + '...</strong>';
+        fileNotice.innerHTML = '⏳ <strong>Analyzing ' + file.name + '...</strong>';
       }
 
       const fd = new FormData();
       fd.append('file', file);
 
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      state.uploadPromise = fetch('/api/upload', { method: 'POST', body: fd }).then(async (res) => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          const msg = err.detail || res.statusText || 'Upload failed';
-          if (fileNotice) {
-            fileNotice.style.display = 'block';
-            fileNotice.style.background = 'rgba(239,68,68,0.1)';
-            fileNotice.style.color = '#dc2626';
-            fileNotice.innerHTML = '❌ <strong>Upload error:</strong> ' + msg;
-          }
-          fileInput.value = '';
-          state.file = null;
-          state.file_id = null;
-          targetInput.innerHTML = '';
-          return;
+          throw new Error(err.detail || res.statusText || 'Upload failed');
         }
         const data = await res.json();
         state.file_id = data.file_id;
-        const cols = data.columns || [];
-        targetInput.innerHTML = cols.map((c, index) => `<option value="${c}"${index === cols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
-        if (cols.length) targetInput.selectedIndex = cols.length - 1;
-
+        const serverCols = data.columns || [];
+        if (!localCols && serverCols.length > 0) {
+          targetInput.innerHTML = serverCols.map((c, index) => `<option value="${c}"${index === serverCols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
+          if (serverCols.length) targetInput.selectedIndex = serverCols.length - 1;
+        }
         if (fileNotice) {
           fileNotice.style.display = 'block';
           fileNotice.style.background = 'rgba(29,191,115,0.1)';
           fileNotice.style.color = '#0f8d56';
-          fileNotice.innerHTML = '✓ <strong>' + (data.filename || file.name) + ' uploaded!</strong> (' + cols.length + ' columns detected). Ready to run pipeline.';
+          fileNotice.innerHTML = '✓ <strong>' + (data.filename || file.name) + ' uploaded!</strong> (' + (serverCols.length || (localCols ? localCols.length : 0)) + ' columns detected). Ready to run pipeline.';
         }
-      } catch (e) {
+        return data.file_id;
+      }).catch((e) => {
         if (fileNotice) {
           fileNotice.style.display = 'block';
           fileNotice.style.background = 'rgba(239,68,68,0.1)';
           fileNotice.style.color = '#dc2626';
-          fileNotice.innerHTML = '❌ <strong>Network error:</strong> ' + e.message;
+          fileNotice.innerHTML = '❌ <strong>Upload error:</strong> ' + e.message;
         }
-      }
+        state.file_id = null;
+        state.uploadPromise = null;
+      });
     }
 
     fileInput.addEventListener('change', onFileSelected);
@@ -491,6 +543,11 @@ HTML = """
 
     trainBtn.addEventListener('click', async () => {
       let fileId = state.file_id;
+      if (!fileId && state.uploadPromise) {
+        statusBox.classList.add('show');
+        statusBox.innerHTML = 'Syncing dataset with server...';
+        fileId = await state.uploadPromise;
+      }
       if (!fileId) {
         const file = state.file || (fileInput.files && fileInput.files[0]);
         if (!file) return alert('Please choose a dataset first.');
