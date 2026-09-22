@@ -357,9 +357,9 @@ HTML = """
       <div class="results-grid" style="margin-top:24px;">
         <div class="section">
           <h4>Model comparison</h4>
-          <h2>Top 3 model comparison</h2>
+          <h2>All Models Leaderboard & Metrics</h2>
           <div id="comparisonBars"></div>
-          <div class="table-wrap"><table id="comparisonTable"></table></div>
+          <div class="table-wrap" style="margin-top:16px;"><table id="comparisonTable"></table></div>
         </div>
         <div class="section">
           <h4>Model interpretability</h4>
@@ -507,25 +507,51 @@ HTML = """
       const fd = new FormData();
       fd.append('file', file);
 
-      state.uploadPromise = fetch('/api/upload', { method: 'POST', body: fd }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || res.statusText || 'Upload failed');
-        }
-        const data = await res.json();
-        state.file_id = data.file_id;
-        const serverCols = data.columns || [];
-        if (!localCols && serverCols.length > 0) {
-          targetInput.innerHTML = serverCols.map((c, index) => `<option value="${c}"${index === serverCols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
-          if (serverCols.length) targetInput.selectedIndex = serverCols.length - 1;
-        }
-        if (fileNotice) {
-          fileNotice.style.display = 'block';
-          fileNotice.style.background = 'rgba(29,191,115,0.1)';
-          fileNotice.style.color = '#0f8d56';
-          fileNotice.innerHTML = '✓ <strong>' + (data.filename || file.name) + ' uploaded!</strong> (' + (serverCols.length || (localCols ? localCols.length : 0)) + ' columns detected). Ready to run pipeline.';
-        }
-        return data.file_id;
+      state.uploadProgress = 0;
+      state.uploadPromise = new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const pct = Math.round((event.loaded / event.total) * 100);
+            state.uploadProgress = pct;
+            if (fileNotice && (!state.file_id)) {
+              fileNotice.innerHTML = '⚡ <strong>' + file.name + ' ready!</strong> (' + (localCols ? localCols.length : '') + ' columns detected). Uploading: <strong>' + pct + '%</strong>';
+            }
+            if (state.isWaitingForUpload) {
+              statusBox.innerHTML = 'Uploading dataset to server: <strong>' + pct + '%</strong>...';
+              progressBar.style.width = Math.max(pct * 0.1, 4) + '%';
+            }
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              state.file_id = data.file_id;
+              const serverCols = data.columns || [];
+              if (!localCols && serverCols.length > 0) {
+                targetInput.innerHTML = serverCols.map((c, index) => `<option value="${c}"${index === serverCols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
+                if (serverCols.length) targetInput.selectedIndex = serverCols.length - 1;
+              }
+              if (fileNotice) {
+                fileNotice.style.display = 'block';
+                fileNotice.style.background = 'rgba(29,191,115,0.1)';
+                fileNotice.style.color = '#0f8d56';
+                fileNotice.innerHTML = '✓ <strong>' + (data.filename || file.name) + ' uploaded (100%)!</strong> (' + (serverCols.length || (localCols ? localCols.length : 0)) + ' columns ready).';
+              }
+              resolve(data.file_id);
+            } catch (err) {
+              reject(err);
+            }
+          } else {
+            let detail = 'Upload failed';
+            try { detail = JSON.parse(xhr.responseText).detail || detail; } catch (_) {}
+            reject(new Error(detail));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        xhr.send(fd);
       }).catch((e) => {
         if (fileNotice) {
           fileNotice.style.display = 'block';
@@ -535,6 +561,7 @@ HTML = """
         }
         state.file_id = null;
         state.uploadPromise = null;
+        throw e;
       });
     }
 
@@ -544,9 +571,22 @@ HTML = """
     trainBtn.addEventListener('click', async () => {
       let fileId = state.file_id;
       if (!fileId && state.uploadPromise) {
+        state.isWaitingForUpload = true;
         statusBox.classList.add('show');
-        statusBox.innerHTML = 'Syncing dataset with server...';
-        fileId = await state.uploadPromise;
+        statusBox.style.background = '';
+        statusBox.style.color = '';
+        statusBox.innerHTML = 'Uploading dataset to server: <strong>' + (state.uploadProgress || 0) + '%</strong>...';
+        progressBar.style.width = Math.max((state.uploadProgress || 0) * 0.1, 4) + '%';
+        try {
+          fileId = await state.uploadPromise;
+        } catch (e) {
+          statusBox.innerHTML = '❌ <strong>Upload error:</strong> ' + e.message;
+          statusBox.style.background = 'rgba(239,68,68,0.1)';
+          statusBox.style.color = '#dc2626';
+          return;
+        } finally {
+          state.isWaitingForUpload = false;
+        }
       }
       if (!fileId) {
         const file = state.file || (fileInput.files && fileInput.files[0]);
@@ -671,12 +711,18 @@ HTML = """
         ['Encoding applied', preprocessing.encoding_report || {}],
       ].map(([title, data]) => `<details><summary>${title}</summary><div class="body">${formatBlock(data)}</div></details>`).join('');
 
-      const comparison = payload.comparison || [];
+      const allComparison = payload.comparison || [];
       const metric = payload.primary_metric || (payload.problem_type === 'Regression' ? 'R2' : 'Accuracy');
-      const topComparison = comparison.slice(0, 3);
+      const topComparison = allComparison.slice(0, 3);
       const maxValue = Math.max(...topComparison.map((row) => Number(row[metric]) || 0), 1);
-      comparisonBars.innerHTML = topComparison.map((row) => `<div class="bar-row"><div>${row.Model}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(((Number(row[metric]) || 0) / maxValue) * 100, 4)}%"></div></div><div>${formatMetric(row[metric])}</div></div>`).join('');
-      comparisonTable.innerHTML = `<thead><tr>${Object.keys(comparison[0] || { Model:'', Accuracy:'', Precision:'', Recall:'', 'F1 Score':'', 'ROC-AUC':'' }).map((k) => `<th>${k}</th>`).join('')}</tr></thead><tbody>${topComparison.map((row) => `<tr>${Object.values(row).map((value) => `<td>${formatMetric(value)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      comparisonBars.innerHTML = topComparison.map((row) => `<div class="bar-row"><div>${row.Model}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(((Number(row[metric]) || 0) / maxValue) * 100, 4)}%"></div></div><div>${formatMetric(row[metric], metric)}</div></div>`).join('');
+
+      if (allComparison.length) {
+        const cols = Object.keys(allComparison[0]);
+        comparisonTable.innerHTML = `<thead><tr>${cols.map((k) => `<th>${k}</th>`).join('')}</tr></thead><tbody>${allComparison.map((row, idx) => `<tr style="${idx === 0 ? 'font-weight:700; background:rgba(29,191,115,0.06);' : ''}">${cols.map((k) => `<td>${k === 'Model' ? (idx === 0 ? '🏆 <strong>' + row[k] + '</strong>' : row[k]) : formatMetric(row[k], k)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      } else {
+        comparisonTable.innerHTML = '<tbody><tr><td class="tiny">No model comparisons available.</td></tr></tbody>';
+      }
 
       const importance = payload.feature_importance || {};
       const correlationPairs = payload.dataset?.correlation_pairs || [];
@@ -743,8 +789,15 @@ HTML = """
       return payload.best_model?.Model ? (payload.primary_metric || 'Accuracy') : 'Accuracy';
     }
 
-    function formatMetric(value) {
-      if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(4);
+    function formatMetric(value, key) {
+      if (typeof value === 'number') {
+        if (Number.isInteger(value)) return String(value);
+        const k = String(key || '').toLowerCase();
+        if (k.includes('acc') || k.includes('f1') || k.includes('prec') || k.includes('rec') || k.includes('auc') || k.includes('roc')) {
+          return (value * 100).toFixed(2) + '%';
+        }
+        return value.toFixed(4);
+      }
       return value ?? '—';
     }
 
