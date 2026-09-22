@@ -8,3 +8,4 @@ uploads/
 saved_models/
 trained_models/
 .DS_Store
+test_page.js
