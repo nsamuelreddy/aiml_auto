@@ -294,20 +294,24 @@ def _build_pipeline_result(
     # Train all models
     if problem_type == "classification":
         _emit_progress(progress_callback, 70, "Training classification models")
-        trained_models, _ = train_models(
+        trained_models, predictions = train_models(
             X_train, y_train, X_test,
             progress_callback=training_progress,
             skip_svm_by_size=skip_svm_by_size,
             selected_model_name=selected_model_name,
         )
+        from sklearn.metrics import accuracy_score
+        baseline_scores = {name: float(accuracy_score(y_test, pred)) for name, pred in predictions.items()}
     else:
         _emit_progress(progress_callback, 70, "Training regression models")
-        trained_models, _ = train_regression_models(
+        trained_models, predictions = train_regression_models(
             X_train, y_train, X_test,
             progress_callback=training_progress,
             skip_svr_by_size=skip_svm_by_size,
             selected_model_name=selected_model_name,
         )
+        from sklearn.metrics import r2_score
+        baseline_scores = {name: float(r2_score(y_test, pred)) for name, pred in predictions.items()}
 
     # Tune top 2 — same for both problem types
     if selected_model_name is not None and selected_model_name in trained_models:
@@ -319,6 +323,7 @@ def _build_pipeline_result(
             problem_type=problem_type,
             progress_callback=tuning_progress,
             top_n=1,
+            baseline_scores=baseline_scores,
         )
     else:
         _emit_progress(progress_callback, 83, "Screening top 2 for hyperparameter tuning")
@@ -329,6 +334,7 @@ def _build_pipeline_result(
             problem_type=problem_type,
             progress_callback=tuning_progress,
             top_n=2,
+            baseline_scores=baseline_scores,
         )
 
     # Re-generate predictions from (possibly) tuned models, then evaluate

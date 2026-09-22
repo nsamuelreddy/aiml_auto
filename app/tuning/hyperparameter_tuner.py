@@ -21,10 +21,10 @@ from backend.parameter_grids import (
 )
 
 # Number of random parameter combinations tried per model.
-# 10 iterations × 3 CV folds = 30 fits per model → fast and effective.
-DEFAULT_N_ITER = 10
-DEFAULT_CV = 3
-DEFAULT_TOP_N = 3
+# 4 iterations × 2 CV folds = 8 fits per model → fast and lightweight for cloud containers.
+DEFAULT_N_ITER = 4
+DEFAULT_CV = 2
+DEFAULT_TOP_N = 2
 
 
 def _cv_score(model: Any, X_train: Any, y_train: Any, scoring: str, cv: int) -> float:
@@ -35,7 +35,7 @@ def _cv_score(model: Any, X_train: Any, y_train: Any, scoring: str, cv: int) -> 
         y_train,
         cv=cv,
         scoring=scoring,
-        n_jobs=2,
+        n_jobs=1,
         error_score=0.0,
     )
     return float(scores.mean())
@@ -50,35 +50,11 @@ def screen_and_tune(
     n_iter: int = DEFAULT_N_ITER,
     cv: int = DEFAULT_CV,
     progress_callback=None,
+    baseline_scores: dict[str, float] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Screen all trained models by CV score, tune the top N, return updated models
     and a summary of what happened.
-
-    Parameters
-    ----------
-    trained_models : dict[str, model]
-        Models already fitted on the training set.
-    X_train, y_train :
-        Training features and labels.
-    problem_type : str
-        "classification" or "regression".
-    top_n : int
-        How many top models to tune (default 3).
-    n_iter : int
-        Number of random parameter combinations to try per model.
-    cv : int
-        Number of cross-validation folds.
-    progress_callback : callable(message: str) | None
-        Optional hook called with a status string for each tuning step.
-
-    Returns
-    -------
-    updated_models : dict[str, model]
-        Original models dict with tuned replacements where applicable.
-    tuning_summary : dict
-        Per-model details: baseline_cv_score, tuned_cv_score, best_params,
-        was_improved, was_tuned.
     """
     is_classification = problem_type == "classification"
     scoring = "accuracy" if is_classification else "r2"
@@ -87,12 +63,14 @@ def screen_and_tune(
     )
 
     # ── Step 1: Screen ────────────────────────────────────────────────────────
-    if progress_callback:
-        progress_callback("Screening models by cross-validation score")
-
-    baseline_scores: dict[str, float] = {}
-    for model_name, model in trained_models.items():
-        baseline_scores[model_name] = _cv_score(model, X_train, y_train, scoring, cv)
+    if baseline_scores is None:
+        if progress_callback:
+            progress_callback("Screening models by validation score")
+        baseline_scores = {}
+        for model_name, model in trained_models.items():
+            baseline_scores[model_name] = _cv_score(model, X_train, y_train, scoring, cv)
+    else:
+        baseline_scores = dict(baseline_scores)
 
     # ── Step 2: Select top N ──────────────────────────────────────────────────
     ranked = sorted(baseline_scores.items(), key=lambda kv: kv[1], reverse=True)
@@ -107,7 +85,7 @@ def screen_and_tune(
             progress_callback(f"Tuning {model_name} ({i}/{len(top_names)})")
 
         param_grid = param_grids.get(model_name)
-        baseline_score = baseline_scores[model_name]
+        baseline_score = baseline_scores.get(model_name, 0.0)
 
         if param_grid is None:
             # No grid defined for this model — skip tuning, still record it.
@@ -132,7 +110,7 @@ def screen_and_tune(
                 cv=cv,
                 scoring=scoring,
                 random_state=42,
-                n_jobs=2,
+                n_jobs=1,
                 refit=True,
                 error_score=0.0,
             )

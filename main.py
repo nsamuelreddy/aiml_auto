@@ -714,11 +714,14 @@ async def detect_columns(file: UploadFile = File(...)):
         path = tmp.name
     try:
         if suffix in {'.csv', ''}:
-            df = pd.read_csv(path)
+            df = pd.read_csv(path, nrows=0)
         elif suffix in {'.xlsx', '.xls'}:
-            df = pd.read_excel(path)
+            df = pd.read_excel(path, nrows=0)
         elif suffix == '.json':
-            df = pd.read_json(path)
+            try:
+                df = pd.read_json(path, nrows=1)
+            except Exception:
+                df = pd.read_json(path)
         columns = [str(c).strip() for c in df.columns]
         if not columns:
             return JSONResponse(content={'detail': 'No columns found in dataset'}, status_code=400)
@@ -745,11 +748,14 @@ async def upload_file(file: UploadFile = File(...)):
         f.write(raw)
     try:
         if suffix in {'.csv', ''}:
-            df = pd.read_csv(dest)
+            df = pd.read_csv(dest, nrows=0)
         elif suffix in {'.xlsx', '.xls'}:
-            df = pd.read_excel(dest)
+            df = pd.read_excel(dest, nrows=0)
         elif suffix == '.json':
-            df = pd.read_json(dest)
+            try:
+                df = pd.read_json(dest, nrows=1)
+            except Exception:
+                df = pd.read_json(dest)
         columns = [str(c).strip() for c in df.columns]
         if not columns:
             if os.path.exists(dest):

@@ -46,6 +46,7 @@ def get_models(skip_svm: bool = False):
     if not skip_svm:
         models["SVM"] = CalibratedClassifierCV(
             estimator=SVC(),
+            cv=2,
             ensemble=False
         )
 
