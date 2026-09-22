@@ -115,27 +115,26 @@ HTML = """
       display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--primary-2));
       border-radius: 999px; transition: width .2s ease;
     }
-    .metrics { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 18px; margin-top: 32px; }
-    .metric { background: rgba(255,255,255,0.7); border: 1px solid var(--line); border-radius: 18px; padding: 18px; min-height: 132px; display:flex; flex-direction:column; justify-content:space-between; }
+    .metrics { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 14px; margin-top: 20px; }
+    .metric { background: rgba(255,255,255,0.7); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; min-height: 100px; display:flex; flex-direction:column; justify-content:space-between; }
     .metric .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; line-height: 1.2; }
-    .metric .v { font-size: clamp(1.35rem, 1.8vw, 2rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1.15; margin-top: auto; padding-top: 10px; }
-    .results { display:none; margin-top: 34px; gap: 24px; }
+    .metric .v { font-size: clamp(1.2rem, 1.6vw, 1.8rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1.15; margin-top: auto; padding-top: 6px; }
+    .results { display:none; margin-top: 18px; gap: 14px; }
     .results.show { display:grid; }
-    .results-grid { display:grid; grid-template-columns: 1.4fr .9fr; gap: 24px; }
+    .results-grid { display:grid; grid-template-columns: 1fr 1.15fr; gap: 14px; align-items: start; }
     .section {
       background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(245,247,255,0.72));
       border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 18px 18px 16px;
-      box-shadow: 0 12px 30px rgba(108, 92, 231, 0.08);
+      border-radius: 16px;
+      padding: 16px 18px 14px;
+      box-shadow: 0 8px 24px rgba(108, 92, 231, 0.05);
+      height: fit-content;
     }
-    .section h2 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: -0.03em; }
-    .section h4 { margin: 0; color: var(--muted); font-size: .9rem; font-weight: 600; }
-    .preview-wrap { margin-top: 14px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; }
-    .scroll-panel { padding-right: 8px; }
-    .preview-wrap { margin-top: 14px; height: 260px; overflow-x: auto; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; }
-    .correlation-wrap { margin-top: 14px; height: 170px; overflow:auto; border: 1px solid var(--line); border-radius: 16px; }
-    .correlation-list { display:grid; gap: 8px; padding: 12px; min-width: 0; }
+    .section h2 { margin: 0 0 10px; font-size: 1.05rem; letter-spacing: -0.03em; }
+    .section h4 { margin: 0 0 4px; color: var(--muted); font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .preview-wrap { margin-top: 10px; height: auto; max-height: 220px; overflow-x: auto; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
+    .correlation-wrap { margin-top: 10px; height: 160px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; }
+    .correlation-list { display:grid; gap: 6px; padding: 10px; min-width: 0; }
     .corr-row { display:grid; grid-template-columns: minmax(90px, 1fr) minmax(100px, 1fr) 56px; gap: 8px; align-items:center; }
     .corr-row > div:first-child, .corr-row > div:nth-child(2) { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
     .corr-bar { height: 14px; border-radius: 999px; background: rgba(105,87,245,0.10); overflow:hidden; }
@@ -144,7 +143,7 @@ HTML = """
       border: 1px solid var(--line);
       border-radius: 12px;
       background: rgba(255,255,255,0.64);
-      margin-top: 10px;
+      margin-top: 8px;
       overflow: hidden;
       transition: border-color .2s ease, box-shadow .2s ease;
     }
@@ -155,7 +154,7 @@ HTML = """
     .accordion summary {
       cursor: pointer;
       list-style: none;
-      padding: 15px 18px;
+      padding: 12px 14px;
       font-weight: 700;
       display: flex;
       align-items: center;
@@ -174,23 +173,23 @@ HTML = """
     .accordion details[open] summary::after {
       transform: rotate(180deg);
     }
-    .accordion .body { padding: 0 18px 16px; color: var(--muted); line-height: 1.6; }
-    .bar-list { display:grid; gap: 12px; margin-top: 12px; }
-    .bar-row { display:grid; grid-template-columns: minmax(120px, 170px) 1fr 72px; gap: 12px; align-items:center; }
+    .accordion .body { padding: 0 14px 12px; color: var(--muted); line-height: 1.6; }
+    .bar-list, #comparisonBars { display:grid; gap: 10px; margin-top: 10px; }
+    .bar-row { display:grid; grid-template-columns: minmax(130px, 1.2fr) 2fr 64px; gap: 10px; align-items:center; }
     .bar-row > div:first-child { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bar-track { height: 16px; border-radius: 999px; background: rgba(105,87,245,0.10); overflow:hidden; }
     .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), var(--primary-2)); }
-    .tune-list { display:grid; gap: 12px; margin-top: 12px; }
+    .tune-list { display:grid; gap: 8px; margin-top: 8px; }
     .tune-card {
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: 12px;
       background: rgba(255,255,255,0.7);
-      padding: 14px 16px;
-      margin-top: 10px;
+      padding: 10px 14px;
+      margin-top: 8px;
     }
-    .tune-card .title { font-weight: 800; margin-bottom: 8px; }
-    .tune-card .meta { color: var(--muted); font-size: .88rem; line-height: 1.5; }
-    .table-wrap { height: 260px; overflow:auto; border: 1px solid var(--line); border-radius: 16px; margin-top: 14px; max-width: 100%; }
+    .tune-card .title { font-weight: 800; margin-bottom: 4px; }
+    .tune-card .meta { color: var(--muted); font-size: .85rem; line-height: 1.45; }
+    .table-wrap { height: auto; max-height: 260px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; margin-top: 10px; max-width: 100%; }
     .compact-card {
       display: flex;
       flex-direction: column;
@@ -354,11 +353,11 @@ HTML = """
         </div>
       </div>
 
-      <div class="results-grid" style="margin-top:24px;">
+      <div class="results-grid">
         <div class="section">
           <h4>Model comparison</h4>
           <h2>Top 3 model comparison</h2>
-          <div id="comparisonBars"></div>
+          <div class="bar-list" id="comparisonBars"></div>
         </div>
         <div class="section">
           <h4>Model interpretability</h4>
@@ -367,11 +366,11 @@ HTML = """
         </div>
       </div>
 
-      <div class="section" style="margin-top:24px;">
+      <div class="section">
         <h4>Comprehensive evaluation</h4>
         <h2>All Models Performance Leaderboard</h2>
-        <div class="tiny" style="margin-bottom:12px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
-        <div class="table-wrap" style="height:auto; max-height:450px;"><table id="comparisonTable"></table></div>
+        <div class="tiny" style="margin-bottom:10px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
+        <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
       </div>
     </section>
 
