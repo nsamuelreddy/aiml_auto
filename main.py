@@ -37,9 +37,9 @@ HTML = """
       --success: #1dbf73;
       --shadow: 0 20px 45px rgba(108, 92, 231, 0.12);
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: Inter, Arial, sans-serif; background: linear-gradient(180deg, #edf2ff, #f8f9ff);
+    html, body {
+      margin: 0; padding: 0; width: 100%; max-width: 100%; overflow-x: hidden;
+      font-family: Inter, Arial, sans-serif; background: linear-gradient(180deg, #edf2ff, #f8f9ff);
       color: var(--text);
     }
     .wrap { max-width: 1180px; margin: 18px auto; padding: 0 20px 40px; }
@@ -281,12 +281,37 @@ HTML = """
     .input-wrap label { display:block; font-weight:700; margin-bottom:8px; color: var(--muted); }
     .input-wrap input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); }
     .results * { min-width: 0; }
-    #predictBtn { display:none; }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
-      .metrics { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
-      .results-columns { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+      .results-columns { grid-template-columns: 1fr !important; }
       #featureForm .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 0 12px 30px; margin: 8px auto; }
+      .topbar { padding: 12px 16px; border-radius: 14px; margin-bottom: 14px; }
+      .brand { font-size: 1.4rem; }
+      .hero { padding: 18px 16px; border-radius: 18px; gap: 16px; }
+      h1 { font-size: 2rem; margin: 12px 0 10px; }
+      .lead { font-size: 1.05rem; line-height: 1.35; }
+      .pills { gap: 6px; margin-top: 14px; }
+      .pill { padding: 6px 10px; font-size: .75rem; }
+      .panel { padding: 16px; border-radius: 16px; }
+      .primary-btn { padding: 14px 16px; font-size: 1rem; }
+      .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+      .metric { padding: 12px; min-height: 80px; border-radius: 14px; }
+      .metric .k { font-size: .65rem; }
+      .metric .v { font-size: 1.25rem; }
+      .results { margin-top: 14px; gap: 12px; }
+      .section { padding: 14px 14px 12px; border-radius: 14px; }
+      .section h2 { font-size: 1rem; margin-bottom: 8px; }
+      .section h4 { font-size: .75rem; }
+      .bar-row { grid-template-columns: minmax(85px, 1.1fr) 1.2fr 48px; gap: 6px; font-size: .8rem; }
+      .bar-track { height: 12px; }
+      .corr-row { grid-template-columns: minmax(75px, 1fr) 1fr 44px; gap: 6px; font-size: .8rem; }
+      .table-wrap, .preview-wrap { border-radius: 12px; margin-top: 8px; -webkit-overflow-scrolling: touch; }
+      table { min-width: 650px; }
+      th, td { padding: 9px 10px; font-size: .8rem; }
     }
   </style>
 </head>
@@ -346,19 +371,6 @@ HTML = """
       <div class="results-columns">
         <div class="results-col">
           <div class="section">
-            <h4>Pipeline steps</h4>
-            <h2>Data preprocessing summary</h2>
-            <div class="accordion" id="prepAccordion"></div>
-          </div>
-          <div class="section">
-            <h4>Hyperparameter tuning</h4>
-            <h2>Best tuned models</h2>
-            <div id="tuningBox"></div>
-          </div>
-        </div>
-
-        <div class="results-col">
-          <div class="section">
             <h4>Model comparison</h4>
             <h2>Top 3 model comparison</h2>
             <div class="bar-list" id="comparisonBars"></div>
@@ -367,6 +379,19 @@ HTML = """
             <h4>Model interpretability</h4>
             <h2>Feature importance highlights</h2>
             <div id="importanceBox"></div>
+          </div>
+        </div>
+
+        <div class="results-col">
+          <div class="section">
+            <h4>Pipeline steps</h4>
+            <h2>Data preprocessing summary</h2>
+            <div class="accordion" id="prepAccordion"></div>
+          </div>
+          <div class="section">
+            <h4>Hyperparameter tuning</h4>
+            <h2>Best tuned models</h2>
+            <div id="tuningBox"></div>
           </div>
         </div>
       </div>
