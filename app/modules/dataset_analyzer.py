@@ -21,6 +21,10 @@ def load_dataset(file_path):
 
         df = pd.read_excel(file_path)
 
+    elif extension == ".json":
+
+        df = pd.read_json(file_path)
+
     else:
         raise ValueError("Unsupported file format")
 

@@ -316,7 +316,7 @@ HTML = """
       <div class="panel">
         <h3>Dataset file</h3>
         <div class="field">
-          <input id="fileInput" type="file" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.85); font-size:1rem; cursor:pointer;" />
+          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" onchange="onFileSelected()" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.85); font-size:1rem; cursor:pointer;" />
           <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:rgba(105,87,245,0.08); display:none;"></div>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
@@ -404,6 +404,37 @@ HTML = """
         if (fileNotice) { fileNotice.style.display = 'none'; fileNotice.textContent = ''; }
         return;
       }
+
+      const allowedExts = ['.csv', '.xlsx', '.xls', '.json'];
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      if (!allowedExts.includes(fileExt)) {
+        if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(239,68,68,0.1)';
+          fileNotice.style.color = '#dc2626';
+          fileNotice.innerHTML = '❌ <strong>Invalid file format (' + (fileExt || 'none') + '):</strong> Only .csv, .xlsx, .xls, and .json files are supported.';
+        }
+        fileInput.value = '';
+        state.file = null;
+        state.file_id = null;
+        targetInput.innerHTML = '';
+        return;
+      }
+
+      if (file.size > 20 * 1024 * 1024) {
+        if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(239,68,68,0.1)';
+          fileNotice.style.color = '#dc2626';
+          fileNotice.innerHTML = '❌ <strong>File too large:</strong> Maximum allowed size is 20 MB.';
+        }
+        fileInput.value = '';
+        state.file = null;
+        state.file_id = null;
+        targetInput.innerHTML = '';
+        return;
+      }
+
       state.file = file;
 
       if (fileNotice) {
@@ -427,6 +458,10 @@ HTML = """
             fileNotice.style.color = '#dc2626';
             fileNotice.innerHTML = '❌ <strong>Upload error:</strong> ' + msg;
           }
+          fileInput.value = '';
+          state.file = null;
+          state.file_id = null;
+          targetInput.innerHTML = '';
           return;
         }
         const data = await res.json();
@@ -662,16 +697,32 @@ def home() -> str:
     return HTML
 
 
+ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.json'}
+
+
 @app.post('/api/columns')
 async def detect_columns(file: UploadFile = File(...)):
     suffix = Path(file.filename or 'data.csv').suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        return JSONResponse(
+            content={'detail': f"Unsupported file type '{suffix or 'none'}'. Supported formats: .csv, .xlsx, .xls, .json"},
+            status_code=400,
+        )
     raw = await file.read()
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '.csv') as tmp:
         tmp.write(raw)
         path = tmp.name
     try:
-        df = pd.read_csv(path) if suffix in {'.csv', ''} else pd.read_excel(path)
-        return JSONResponse(content=[str(c) for c in df.columns])
+        if suffix in {'.csv', ''}:
+            df = pd.read_csv(path)
+        elif suffix in {'.xlsx', '.xls'}:
+            df = pd.read_excel(path)
+        elif suffix == '.json':
+            df = pd.read_json(path)
+        columns = [str(c).strip() for c in df.columns]
+        if not columns:
+            return JSONResponse(content={'detail': 'No columns found in dataset'}, status_code=400)
+        return JSONResponse(content=columns)
     except Exception as e:
         return JSONResponse(content={'detail': f'Error reading columns: {str(e)}'}, status_code=400)
     finally:
@@ -681,17 +732,33 @@ async def detect_columns(file: UploadFile = File(...)):
 
 @app.post('/api/upload')
 async def upload_file(file: UploadFile = File(...)):
-    suffix = Path(file.filename or 'data.csv').suffix.lower() or '.csv'
+    suffix = Path(file.filename or 'data.csv').suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        return JSONResponse(
+            {'detail': f"Unsupported file type '{suffix or 'none'}'. Supported formats: .csv, .xlsx, .xls, .json"},
+            status_code=400,
+        )
     file_id = str(uuid.uuid4())
     dest = UPLOAD_DIR / f"{file_id}{suffix}"
     raw = await file.read()
     with open(dest, 'wb') as f:
         f.write(raw)
     try:
-        df = pd.read_csv(dest) if suffix in {'.csv', ''} else pd.read_excel(dest)
+        if suffix in {'.csv', ''}:
+            df = pd.read_csv(dest)
+        elif suffix in {'.xlsx', '.xls'}:
+            df = pd.read_excel(dest)
+        elif suffix == '.json':
+            df = pd.read_json(dest)
         columns = [str(c).strip() for c in df.columns]
-    except Exception:
-        columns = []
+        if not columns:
+            if os.path.exists(dest):
+                os.remove(dest)
+            return JSONResponse({'detail': 'No columns detected in dataset'}, status_code=400)
+    except Exception as e:
+        if os.path.exists(dest):
+            os.remove(dest)
+        return JSONResponse({'detail': f'Failed to parse dataset: {str(e)}'}, status_code=400)
     return JSONResponse({'file_id': file_id, 'filename': file.filename or 'data.csv', 'columns': columns})
 
 
