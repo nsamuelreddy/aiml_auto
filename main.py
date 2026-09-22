@@ -121,7 +121,9 @@ HTML = """
     .metric .v { font-size: clamp(1.2rem, 1.6vw, 1.8rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1.15; margin-top: auto; padding-top: 6px; }
     .results { display:none; margin-top: 18px; gap: 14px; }
     .results.show { display:grid; }
-    .results-grid { display:grid; grid-template-columns: 1fr 1.15fr; gap: 14px; align-items: start; }
+    .results-columns { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+    .results-col { display:flex; flex-direction:column; gap: 14px; }
+    #importanceList { max-height: 330px; overflow-y: auto; padding-right: 4px; }
     .section {
       background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(245,247,255,0.72));
       border: 1px solid var(--line);
@@ -283,6 +285,7 @@ HTML = """
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+      .results-columns { grid-template-columns: 1fr; }
       #featureForm .grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -340,29 +343,31 @@ HTML = """
         <div class="preview-wrap"><table id="previewTable"></table></div>
       </div>
 
-      <div class="results-grid">
-        <div class="section">
-          <h4>Pipeline steps</h4>
-          <h2>Data preprocessing summary</h2>
-          <div class="accordion" id="prepAccordion"></div>
+      <div class="results-columns">
+        <div class="results-col">
+          <div class="section">
+            <h4>Pipeline steps</h4>
+            <h2>Data preprocessing summary</h2>
+            <div class="accordion" id="prepAccordion"></div>
+          </div>
+          <div class="section">
+            <h4>Hyperparameter tuning</h4>
+            <h2>Best tuned models</h2>
+            <div id="tuningBox"></div>
+          </div>
         </div>
-        <div class="section">
-          <h4>Hyperparameter tuning</h4>
-          <h2>Best tuned models</h2>
-          <div id="tuningBox"></div>
-        </div>
-      </div>
 
-      <div class="results-grid">
-        <div class="section">
-          <h4>Model comparison</h4>
-          <h2>Top 3 model comparison</h2>
-          <div class="bar-list" id="comparisonBars"></div>
-        </div>
-        <div class="section">
-          <h4>Model interpretability</h4>
-          <h2>Feature importance highlights</h2>
-          <div id="importanceBox"></div>
+        <div class="results-col">
+          <div class="section">
+            <h4>Model comparison</h4>
+            <h2>Top 3 model comparison</h2>
+            <div class="bar-list" id="comparisonBars"></div>
+          </div>
+          <div class="section">
+            <h4>Model interpretability</h4>
+            <h2>Feature importance highlights</h2>
+            <div id="importanceBox"></div>
+          </div>
         </div>
       </div>
 
