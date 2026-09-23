@@ -313,6 +313,18 @@ HTML = """
       table { min-width: 650px; }
       th, td { padding: 9px 10px; font-size: .8rem; }
     }
+    .footer {
+      margin-top: 40px;
+      padding: 24px 16px 14px;
+      border-top: 1px solid var(--line);
+      text-align: center;
+      color: var(--muted);
+      font-size: .88rem;
+    }
+    .footer strong {
+      color: var(--text);
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -408,6 +420,10 @@ HTML = """
       <div class="grid" id="featureGrid"></div>
       <button class="primary-btn" id="predictBtn" type="submit">Predict</button>
     </form>
+
+    <footer class="footer">
+      <div>© 2026 AutoML Studio · Developed by <strong>N Samuel Reddy</strong>. All rights reserved.</div>
+    </footer>
   </div>
 
   <script>
