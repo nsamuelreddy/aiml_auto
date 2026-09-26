@@ -72,6 +72,37 @@ def _infer_problem_type(target: pd.Series) -> str:
     return "classification"
 
 
+def detect_default_target(columns: list[str]) -> str | None:
+    if not columns:
+        return None
+    norm = {str(c).strip().lower().replace(" ", "_"): c for c in columns}
+    for key in [
+        "is_fraud", "fraud", "loan_status", "survived", "target", "label",
+        "class", "y", "income", "outcome", "status", "churn", "deposit"
+    ]:
+        if key in norm:
+            return norm[key]
+    for cand in ["fraud", "status", "survived", "target", "label", "class", "y"]:
+        for c in columns:
+            if cand in str(c).lower():
+                return c
+    return columns[-1]
+
+
+def _is_all_integers(series: pd.Series) -> bool:
+    if series.empty or not pd.api.types.is_numeric_dtype(series):
+        return False
+    if pd.api.types.is_integer_dtype(series):
+        return True
+    try:
+        clean = series.dropna()
+        if clean.empty:
+            return False
+        return bool((clean % 1 == 0).all())
+    except Exception:
+        return False
+
+
 def _encode_target_labels(target: pd.Series) -> tuple[pd.Series, dict[str, int] | None]:
     cleaned_target = target.copy()
 
@@ -200,16 +231,38 @@ def _build_pipeline_result(
 
     # Normalize the chosen target before any feature cleaning. This prevents the label from being removed
     # by irrelevant-column filtering or one-hot encoding later in the pipeline.
-    target_column = target_column.strip().lower().replace(" ", "_")
-    normalized_to_original = {str(col).strip().lower().replace(" ", "_"): col for col in df.columns}
-    if target_column not in df.columns and target_column in normalized_to_original:
-        target_column = normalized_to_original[target_column]
+    raw_target = str(target_column or "").strip().strip("'\"")
+    norm_target = raw_target.lower().replace(" ", "_")
 
-    if target_column not in df.columns:
+    matched_target = None
+    if raw_target in df.columns:
+        matched_target = raw_target
+    elif norm_target in df.columns:
+        matched_target = norm_target
+    else:
+        for col in df.columns:
+            str_col = str(col).strip().lower().replace(" ", "_")
+            if str_col == norm_target or str(col).strip().lower() == raw_target.lower():
+                matched_target = col
+                break
+
+    if not matched_target:
+        orig_cols_cleaned = {clean_column_names(pd.DataFrame(columns=[c])).columns[0]: c for c in original_df.columns}
+        for cleaned_c, orig_c in orig_cols_cleaned.items():
+            if str(orig_c).strip().lower() == raw_target.lower() or str(orig_c).strip().lower().replace(" ", "_") == norm_target:
+                if cleaned_c in df.columns:
+                    matched_target = cleaned_c
+                    break
+
+    if not matched_target:
+        matched_target = detect_default_target(df.columns.tolist())
+
+    if not matched_target or matched_target not in df.columns:
         raise ValueError(
             f"Target column '{target_column}' was not found after preprocessing. "
             "Please choose a valid target column."
         )
+    target_column = matched_target
 
     y = df[target_column].copy()
     df = df.drop(columns=[target_column])
@@ -318,8 +371,8 @@ def _build_pipeline_result(
                 continue
 
             # 3. Discrete numeric features with small cardinality (<= 8 unique values)
-            if len(unique_vals) <= 8 and pd.api.types.is_numeric_dtype(series) and series.apply(float.is_integer).all():
-                sorted_vals = sorted(int(v) for v in unique_vals)
+            if len(unique_vals) <= 8 and _is_all_integers(series):
+                sorted_vals = sorted(int(round(float(v))) for v in unique_vals if pd.notna(v))
                 feature_schema.append({
                     "name": col,
                     "type": "select",
@@ -333,18 +386,18 @@ def _build_pipeline_result(
             min_val = float(series.min()) if not series.empty else 0.0
             max_val = float(series.max()) if not series.empty else 0.0
             median_val = float(series.median()) if not series.empty else 0.0
-            is_int = bool(series.apply(float.is_integer).all()) if not series.empty else False
+            is_int = _is_all_integers(series)
 
-            min_disp = int(min_val) if is_int else round(min_val, 1)
-            max_disp = int(max_val) if is_int else round(max_val, 1)
-            med_disp = int(median_val) if is_int else round(median_val, 1)
+            min_disp = int(round(min_val)) if is_int else round(min_val, 1)
+            max_disp = int(round(max_val)) if is_int else round(max_val, 1)
+            med_disp = int(round(median_val)) if is_int else round(median_val, 1)
 
             feature_schema.append({
                 "name": col,
                 "type": "number",
-                "default": int(median_val) if is_int else round(median_val, 2),
-                "min": int(min_val) if is_int else round(min_val, 2),
-                "max": int(max_val) if is_int else round(max_val, 2),
+                "default": int(round(median_val)) if is_int else round(median_val, 2),
+                "min": int(round(min_val)) if is_int else round(min_val, 2),
+                "max": int(round(max_val)) if is_int else round(max_val, 2),
                 "step": 1 if is_int else "any",
                 "help": f"Range: {min_disp} to {max_disp} (Median: {med_disp})",
             })

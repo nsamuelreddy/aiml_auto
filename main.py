@@ -10,7 +10,7 @@ import pandas as pd
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from backend.main import _build_pipeline_result, _to_serializable
+from backend.main import _build_pipeline_result, _to_serializable, detect_default_target
 
 app = FastAPI(title="AutoML Studio")
 MODEL_STATE: dict = {}
@@ -427,7 +427,7 @@ HTML = """
     </form>
 
     <footer class="footer">
-      <div>© 2026 AutoML Studio · Developed by <strong>N Samuel Reddy</strong>. All rights reserved.</div>
+      <div>Made by <strong>N Samuel Reddy</strong></div>
     </footer>
   </div>
 
@@ -541,6 +541,8 @@ HTML = """
       }
 
       state.file = file;
+      state.file_id = null;
+      state.uploadPromise = null;
 
       // Instant client-side column extraction (0 ms)
       const localCols = await parseColumnsLocally(file);
@@ -586,9 +588,14 @@ HTML = """
               const data = JSON.parse(xhr.responseText);
               state.file_id = data.file_id;
               const serverCols = data.columns || [];
-              if (!localCols && serverCols.length > 0) {
-                targetInput.innerHTML = serverCols.map((c, index) => `<option value="${c}"${index === serverCols.length - 1 ? ' selected' : ''}>${c}</option>`).join('');
-                if (serverCols.length) targetInput.selectedIndex = serverCols.length - 1;
+              if (serverCols.length > 0) {
+                const currentVal = targetInput.value;
+                targetInput.innerHTML = serverCols.map((c, index) => `<option value="${c}"${c === currentVal || (!currentVal && index === serverCols.length - 1) ? ' selected' : ''}>${c}</option>`).join('');
+                if (currentVal && serverCols.includes(currentVal)) {
+                  targetInput.value = currentVal;
+                } else if (serverCols.length) {
+                  targetInput.selectedIndex = serverCols.length - 1;
+                }
               }
               if (fileNotice) {
                 fileNotice.style.display = 'block';
@@ -1037,17 +1044,7 @@ async def train_stream(file_id: str, target: str | None = None):
 
 
 def _detect_default_target(columns: list[str]) -> str | None:
-    if not columns:
-        return None
-    norm = {str(c).strip().lower(): c for c in columns}
-    for key in ["survived", "target", "label", "class", "y", "loan_status", "income", "outcome", "status"]:
-        if key in norm:
-            return norm[key]
-    for cand in ["survived", "target", "label", "class", "y"]:
-        for c in columns:
-            if cand in str(c).lower():
-                return c
-    return columns[-1]
+    return detect_default_target(columns)
 
 
 @app.post('/api/train')
