@@ -279,7 +279,12 @@ HTML = """
     #featureForm .grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 16px; }
     .input-wrap { background: rgba(255,255,255,0.7); border: 1px solid var(--line); padding: 14px; border-radius: 14px; }
     .input-wrap label { display:block; font-weight:700; margin-bottom:8px; color: var(--muted); }
-    .input-wrap input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); }
+    .input-wrap input, .input-wrap select {
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+      background: rgba(255,255,255,0.85); color: var(--text); font-size: 0.95rem; font-family: inherit; outline: none; transition: .2s ease;
+    }
+    .input-wrap select { cursor: pointer; }
+    .input-wrap input:focus, .input-wrap select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(105,87,245,0.1); }
     .results * { min-width: 0; }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
@@ -679,7 +684,7 @@ HTML = """
           renderPreview(payload.dataset?.preview || []);
           renderMetrics(payload.summary || payload.dashboard_summary || {});
           renderResults(payload);
-          renderFeatureFields(payload.feature_names || payload.selected_feature_names || []);
+          renderFeatureFields(payload.feature_schema || payload.selected_feature_names || payload.feature_names || []);
           statusBox.innerHTML = '✓ Pipeline completed successfully. <span id="statusPct">100%</span>';
           statusBox.style.background = 'rgba(29,191,115,0.1)';
           statusBox.style.color = '#0f8d56';
@@ -709,8 +714,8 @@ HTML = """
     featureForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const payload = {};
-      for (const input of document.querySelectorAll('#featureGrid input')) {
-        payload[input.name] = input.value;
+      for (const el of document.querySelectorAll('#featureGrid input, #featureGrid select')) {
+        payload[el.name] = el.value;
       }
       const resp = await fetch('/api/predict', {
         method: 'POST',
@@ -726,15 +731,20 @@ HTML = """
       }
 
       const prediction = data?.prediction;
-      const prob0 = Number(data?.probabilities?.['0'] ?? 0) * 100;
-      const prob1 = Number(data?.probabilities?.['1'] ?? 0) * 100;
-
+      const predLabel = data?.prediction_label ?? prediction;
       if (prediction === undefined || prediction === null) {
         alert('Prediction failed: the backend did not return a valid prediction value.');
         return;
       }
 
-      alert('Prediction: ' + prediction + ' | Class 0: ' + prob0.toFixed(2) + '% | Class 1: ' + prob1.toFixed(2) + '%');
+      let alertMsg = '🎯 Prediction: ' + predLabel;
+      if (data?.probabilities && Object.keys(data.probabilities).length) {
+        const probs = Object.entries(data.probabilities)
+          .map(([k, v]) => `Class ${k}: ${(Number(v) * 100).toFixed(1)}%`)
+          .join(' | ');
+        alertMsg += '\\n\\nProbability Confidence:\\n' + probs;
+      }
+      alert(alertMsg);
     });
 
     function renderMetrics(summary) {
@@ -852,14 +862,41 @@ HTML = """
       return value ?? '—';
     }
 
-    function renderFeatureFields(names) {
-      if (!names || !names.length) return;
-      featureGrid.innerHTML = names.map((name) => `
-        <div class="input-wrap">
-          <label>${name}</label>
-          <input name="${name}" type="number" value="0" step="any" />
-        </div>
-      `).join('');
+    function renderFeatureFields(schemaOrNames) {
+      if (!schemaOrNames || !schemaOrNames.length) return;
+      featureGrid.innerHTML = schemaOrNames.map((item) => {
+        const isObj = typeof item === 'object' && item !== null;
+        const name = isObj ? item.name : item;
+        const type = isObj ? item.type : 'number';
+        const help = isObj && item.help ? `<div class="tiny" style="margin-top:6px; font-size:.76rem; color:var(--muted);">${item.help}</div>` : '';
+
+        if (type === 'select' && item.options && item.options.length) {
+          const defaultVal = item.default !== undefined ? item.default : item.options[0].value;
+          const optionsHtml = item.options.map((opt) => `<option value="${opt.value}" ${opt.value === defaultVal ? 'selected' : ''}>${opt.label}</option>`).join('');
+          return `
+            <div class="input-wrap">
+              <label for="field_${name}">${name}</label>
+              <select id="field_${name}" name="${name}">
+                ${optionsHtml}
+              </select>
+              ${help}
+            </div>
+          `;
+        }
+
+        const defaultVal = isObj && item.default !== undefined ? item.default : 0;
+        const step = isObj && item.step !== undefined ? item.step : 'any';
+        const minAttr = isObj && item.min !== undefined && item.min !== null ? `min="${item.min}"` : '';
+        const maxAttr = isObj && item.max !== undefined && item.max !== null ? `max="${item.max}"` : '';
+
+        return `
+          <div class="input-wrap">
+            <label for="field_${name}">${name}</label>
+            <input id="field_${name}" name="${name}" type="number" value="${defaultVal}" step="${step}" ${minAttr} ${maxAttr} />
+            ${help}
+          </div>
+        `;
+      }).join('');
       featureForm.style.display = 'block';
       predictBtn.style.display = 'block';
     }
@@ -1051,6 +1088,7 @@ async def train(file: UploadFile = File(...), target_column: str = Form(None)):
                 'best_metric': summary.get('best_metric_value', '—'),
             },
             'feature_names': result.get('selected_feature_names') or result.get('feature_names', []),
+            'feature_schema': result.get('feature_schema', []),
             'detected_target': target_column,
         }
     finally:
@@ -1064,15 +1102,35 @@ async def predict(payload: dict):
     features = MODEL_STATE.get('selected_feature_names') or MODEL_STATE.get('feature_names') or []
     if model is None or not features:
         return JSONResponse({'detail': 'Train a model first.'}, status_code=400)
-    row = {name: float(payload.get(name, 0)) for name in features}
+
+    scaling_params = MODEL_STATE.get('scaling_params') or {}
+    row = {}
+    for name in features:
+        val = float(payload.get(name, 0))
+        if name in scaling_params:
+            mean = scaling_params[name].get('mean', 0.0)
+            scale = scaling_params[name].get('scale', 1.0)
+            if scale != 0:
+                val = (val - mean) / scale
+        row[name] = val
+
     df = pd.DataFrame([row], columns=features)
-    pred = int(model.predict(df)[0])
+    raw_pred = model.predict(df)[0]
+    is_regression = str(MODEL_STATE.get('problem_type', '')).lower() == 'regression'
+    pred = float(raw_pred) if is_regression else int(raw_pred)
+
     probs = {}
-    if hasattr(model, 'predict_proba'):
-        classes = [str(c) for c in model.classes_.tolist()]
-        vals = model.predict_proba(df)[0].tolist()
-        probs = {cls: float(v) for cls, v in zip(classes, vals, strict=False)}
-    return {'prediction': pred, 'probabilities': probs}
+    if hasattr(model, 'predict_proba') and not is_regression:
+        try:
+            classes = [str(c) for c in model.classes_.tolist()]
+            vals = model.predict_proba(df)[0].tolist()
+            probs = {cls: float(v) for cls, v in zip(classes, vals, strict=False)}
+        except Exception:
+            pass
+
+    target_mapping = MODEL_STATE.get('target_label_mapping') or {}
+    pred_label = target_mapping.get(str(pred), str(pred))
+    return {'prediction': pred, 'prediction_label': pred_label, 'probabilities': probs}
 
 
 if __name__ == '__main__':

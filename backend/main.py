@@ -247,6 +247,7 @@ def _build_pipeline_result(
     encoding_final_report = encoding_report(label_report, one_hot_report)
 
     _emit_progress(progress_callback, 46, "Preparing features")
+    unscaled_features_df = df.copy()
     x = df
     problem_type = _infer_problem_type(y)
     input_feature_names = x.columns.tolist()
@@ -274,6 +275,86 @@ def _build_pipeline_result(
     x, correlation_report = correlation_selection(x)
     feature_report = feature_selection_report(variance_report, correlation_report)
     selected_feature_names = x.columns.tolist()
+
+    # Extract scaling parameters for accurate inference during prediction
+    scaling_params = {}
+    if scaler is not None and hasattr(scaler, "feature_names_in_") and hasattr(scaler, "mean_") and hasattr(scaler, "scale_"):
+        for fname, fmean, fscale in zip(scaler.feature_names_in_, scaler.mean_, scaler.scale_):
+            scaling_params[fname] = {"mean": float(fmean), "scale": float(fscale) if fscale != 0 else 1.0}
+
+    # Build smart schema for prediction form (dropdowns for encoded/categorical, number inputs for continuous)
+    feature_schema = []
+    for col in selected_feature_names:
+        # 1. Label-encoded categorical features
+        if encoder_artifact and col in encoder_artifact:
+            enc = encoder_artifact[col]
+            classes = [str(c) for c in enc.classes_]
+            options = [{"label": c, "value": int(i)} for i, c in enumerate(classes)]
+            feature_schema.append({
+                "name": col,
+                "type": "select",
+                "options": options,
+                "default": int(options[0]["value"]) if options else 0,
+                "help": "Categorical (Select option)",
+            })
+            continue
+
+        if col in unscaled_features_df.columns:
+            series = unscaled_features_df[col].dropna()
+            unique_vals = series.unique().tolist()
+
+            # 2. Binary / One-hot encoded features
+            if set(unique_vals).issubset({0, 1, 0.0, 1.0}) and len(unique_vals) <= 2:
+                feature_schema.append({
+                    "name": col,
+                    "type": "select",
+                    "options": [
+                        {"label": "0 (No / False)", "value": 0},
+                        {"label": "1 (Yes / True)", "value": 1},
+                    ],
+                    "default": 0,
+                    "help": "Binary feature (0 = No, 1 = Yes)",
+                })
+                continue
+
+            # 3. Discrete numeric features with small cardinality (<= 8 unique values)
+            if len(unique_vals) <= 8 and pd.api.types.is_numeric_dtype(series) and series.apply(float.is_integer).all():
+                sorted_vals = sorted(int(v) for v in unique_vals)
+                feature_schema.append({
+                    "name": col,
+                    "type": "select",
+                    "options": [{"label": str(v), "value": v} for v in sorted_vals],
+                    "default": sorted_vals[0],
+                    "help": f"Discrete feature ({len(sorted_vals)} options)",
+                })
+                continue
+
+            # 4. Continuous numerical features
+            min_val = float(series.min()) if not series.empty else 0.0
+            max_val = float(series.max()) if not series.empty else 0.0
+            median_val = float(series.median()) if not series.empty else 0.0
+            is_int = bool(series.apply(float.is_integer).all()) if not series.empty else False
+
+            min_disp = int(min_val) if is_int else round(min_val, 1)
+            max_disp = int(max_val) if is_int else round(max_val, 1)
+            med_disp = int(median_val) if is_int else round(median_val, 1)
+
+            feature_schema.append({
+                "name": col,
+                "type": "number",
+                "default": int(median_val) if is_int else round(median_val, 2),
+                "min": int(min_val) if is_int else round(min_val, 2),
+                "max": int(max_val) if is_int else round(max_val, 2),
+                "step": 1 if is_int else "any",
+                "help": f"Range: {min_disp} to {max_disp} (Median: {med_disp})",
+            })
+        else:
+            feature_schema.append({
+                "name": col,
+                "type": "number",
+                "default": 0,
+                "step": "any",
+            })
 
     warnings: list[str] = []
     try:
@@ -413,6 +494,8 @@ def _build_pipeline_result(
         "best_model_object": best_model_object,
         "feature_names": input_feature_names,
         "selected_feature_names": selected_feature_names,
+        "feature_schema": _to_serializable(feature_schema),
+        "scaling_params": _to_serializable(scaling_params),
         "feature_importance": feature_importance,
         "dashboard_summary": dashboard_summary,
         "target_column": target_column,
