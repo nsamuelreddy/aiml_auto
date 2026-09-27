@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 import uuid
 import json
@@ -562,23 +563,38 @@ HTML = """
         fileNotice.innerHTML = '⏳ <strong>Analyzing ' + file.name + '...</strong>';
       }
 
+      if (state.currentXhr) {
+        try { state.currentXhr.abort(); } catch (_) {}
+      }
+
       const fd = new FormData();
       fd.append('file', file);
 
       state.uploadProgress = 0;
       state.uploadPromise = new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        state.currentXhr = xhr;
         xhr.open('POST', '/api/upload');
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {
             const pct = Math.round((event.loaded / event.total) * 100);
             state.uploadProgress = pct;
-            if (fileNotice && (!state.file_id)) {
-              fileNotice.innerHTML = '⚡ <strong>' + file.name + ' ready!</strong> (' + (localCols ? localCols.length : '') + ' columns detected). Uploading: <strong>' + pct + '%</strong>';
-            }
-            if (state.isWaitingForUpload) {
-              statusBox.innerHTML = 'Uploading dataset to server: <strong>' + pct + '%</strong>...';
-              progressBar.style.width = Math.max(pct * 0.1, 4) + '%';
+            if (pct >= 100) {
+              if (fileNotice && (!state.file_id)) {
+                fileNotice.innerHTML = '⚡ <strong>' + file.name + ' transfer complete!</strong> Finalizing on server...';
+              }
+              if (state.isWaitingForUpload) {
+                statusBox.innerHTML = 'Upload transfer complete (100%). Saving and initializing dataset on server...';
+                progressBar.style.width = '15%';
+              }
+            } else {
+              if (fileNotice && (!state.file_id)) {
+                fileNotice.innerHTML = '⚡ <strong>' + file.name + ' ready!</strong> (' + (localCols ? localCols.length : '') + ' columns detected). Uploading: <strong>' + pct + '%</strong>';
+              }
+              if (state.isWaitingForUpload) {
+                statusBox.innerHTML = 'Uploading dataset to server: <strong>' + pct + '%</strong>...';
+                progressBar.style.width = Math.max(pct * 0.1, 4) + '%';
+              }
             }
           }
         };
@@ -629,7 +645,6 @@ HTML = """
     }
 
     fileInput.addEventListener('change', onFileSelected);
-    fileInput.addEventListener('input', onFileSelected);
 
     trainBtn.addEventListener('click', async () => {
       let fileId = state.file_id;
@@ -964,9 +979,8 @@ async def upload_file(file: UploadFile = File(...)):
         )
     file_id = str(uuid.uuid4())
     dest = UPLOAD_DIR / f"{file_id}{suffix}"
-    raw = await file.read()
-    with open(dest, 'wb') as f:
-        f.write(raw)
+    with open(dest, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
     try:
         if suffix in {'.csv', ''}:
             df = pd.read_csv(dest, nrows=0)
