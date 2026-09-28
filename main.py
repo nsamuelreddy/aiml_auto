@@ -1,22 +1,38 @@
 import os
 import shutil
-import tempfile
 import uuid
 import json
 import threading
 import queue
+import time
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.main import _build_pipeline_result, _to_serializable, detect_default_target
 
 app = FastAPI(title="AutoML Studio")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 MODEL_STATE: dict = {}
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+DEMO_DIR = Path(__file__).resolve().parent / "demo_datasets"
+DEMO_DIR.mkdir(parents=True, exist_ok=True)
+
+def _cleanup_old_uploads():
+    cutoff = time.time() - 86400
+    for p in UPLOAD_DIR.glob("*.csv"):
+        try:
+            if p.stat().st_mtime < cutoff:
+                p.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+threading.Thread(target=_cleanup_old_uploads, daemon=True).start()
 
 HTML = """
 <!DOCTYPE html>
@@ -28,7 +44,10 @@ HTML = """
   <style>
     :root {
       --bg: #edf2ff;
-      --card: rgba(255,255,255,0.82);
+      --bg-gradient: linear-gradient(180deg, #edf2ff, #f8f9ff);
+      --card: rgba(255, 255, 255, 0.85);
+      --card-solid: #ffffff;
+      --panel-bg: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(245,247,255,0.85));
       --soft: #f5f7ff;
       --line: #dfe7ff;
       --text: #1f2a44;
@@ -37,65 +56,81 @@ HTML = """
       --primary-2: #8e7bff;
       --success: #1dbf73;
       --shadow: 0 20px 45px rgba(108, 92, 231, 0.12);
+      --input-bg: rgba(255, 255, 255, 0.9);
+      --table-bg: rgba(255, 255, 255, 0.85);
+      --code-bg: rgba(245, 247, 255, 0.8);
+      --pill-bg: rgba(105, 87, 245, 0.08);
+      --pill-border: rgba(105, 87, 245, 0.14);
+    }
+    [data-theme="dark"] {
+      --bg: #0b0f19;
+      --bg-gradient: linear-gradient(180deg, #0b0f19, #131b2e);
+      --card: rgba(21, 30, 48, 0.88);
+      --card-solid: #151e30;
+      --panel-bg: linear-gradient(180deg, rgba(21, 30, 48, 0.95), rgba(16, 23, 38, 0.9));
+      --soft: #19243a;
+      --line: #263554;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #818cf8;
+      --primary-2: #a5b4fc;
+      --success: #10b981;
+      --shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+      --input-bg: #19243a;
+      --table-bg: rgba(21, 30, 48, 0.85);
+      --code-bg: #101726;
+      --pill-bg: rgba(129, 140, 248, 0.14);
+      --pill-border: rgba(129, 140, 248, 0.25);
     }
     html, body {
       margin: 0; padding: 0; width: 100%; max-width: 100%; overflow-x: hidden;
-      font-family: Inter, Arial, sans-serif; background: linear-gradient(180deg, #edf2ff, #f8f9ff);
+      font-family: Inter, Arial, sans-serif; background: var(--bg-gradient);
       color: var(--text);
+      transition: background 0.25s ease, color 0.25s ease;
     }
     .wrap { max-width: 1180px; margin: 18px auto; padding: 0 20px 40px; }
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
-      background: rgba(255,255,255,0.5); border: 1px solid var(--line); border-radius: 18px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 18px;
       box-shadow: var(--shadow); padding: 15px 22px; margin-bottom: 20px;
       backdrop-filter: blur(10px);
+      position: sticky; top: 12px; z-index: 100;
+    }
+    .hero, .results, #featureForm, #metrics, .section, #detailsSection {
+      scroll-margin-top: 90px;
     }
     .brand { font-size: 2rem; font-weight: 800; letter-spacing: -0.06em; color: var(--primary); }
-    nav { display: flex; gap: 14px; }
+    nav { display: flex; gap: 10px; }
     .nav-btn {
       border: none; background: transparent; color: var(--muted); padding: 8px 12px; border-radius: 10px;
       font-weight: 700; cursor: pointer; transition: .2s ease; 
     }
-    .nav-btn.active, .nav-btn:hover { background: rgba(105,87,245,0.08); color: var(--primary); }
+    .nav-btn.active, .nav-btn:hover { background: var(--pill-bg); color: var(--primary); }
     .hero {
-      display: grid; grid-template-columns: 1.3fr 0.9fr; gap: 26px; background: rgba(255,255,255,0.7);
+      display: grid; grid-template-columns: 1.3fr 0.9fr; gap: 26px; background: var(--card);
       border: 1px solid var(--line); border-radius: 28px; padding: 34px 30px; box-shadow: var(--shadow);
     }
     .tag {
       display: inline-flex; align-items: center; border-radius: 999px; padding: 7px 14px; font-size: 0.8rem;
-      background: rgba(105,87,245,0.08); color: var(--primary); font-weight: 700; border: 1px solid rgba(105,87,245,0.15);
+      background: var(--pill-bg); color: var(--primary); font-weight: 700; border: 1px solid var(--pill-border);
     }
     h1 { font-size: clamp(3rem, 5vw, 5rem); line-height: 1; letter-spacing: -0.07em; margin: 20px 0 18px; }
     .lead { font-size: 2rem; color: var(--muted); line-height: 1.4; font-weight: 500; }
     .pills { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
     .pill {
-      background: rgba(105,87,245,0.08); color: var(--primary); padding: 9px 15px; border-radius: 999px;
-      border: 1px solid rgba(105,87,245,0.14); font-weight: 700; font-size: .82rem; transition: transform .2s ease, box-shadow .2s ease;
+      background: var(--pill-bg); color: var(--primary); padding: 9px 15px; border-radius: 999px;
+      border: 1px solid var(--pill-border); font-weight: 700; font-size: .82rem; transition: transform .2s ease, box-shadow .2s ease;
     }
     .pill:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(105,87,245,0.12); }
     .panel {
-      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,247,255,0.82));
+      background: var(--panel-bg);
       border: 1px solid var(--line); border-radius: 24px; padding: 20px; box-shadow: var(--shadow);
     }
     .panel h3 { margin: 0 0 14px; font-size: 1.15rem; }
     .field { margin-top: 14px; }
     .label { display:block; font-size: .8rem; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
-    .file-wrap { position: relative; }
-    .file-wrap input[type=file] {
-      position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;
-    }
-    .fake-file {
-      display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 16px; border-radius: 12px;
-      border: 1px solid var(--line); background: rgba(255,255,255,0.7); color: var(--text); font-weight: 700;
-      transition: .2s ease;
-    }
-    .fake-file:hover { border-color: var(--primary); box-shadow: 0 10px 24px rgba(105,87,245,0.08); }
-    .choose-btn {
-      background: linear-gradient(135deg, var(--primary), var(--primary-2)); border: none; color: white;
-      border-radius: 10px; padding: 8px 14px; font-weight: 700; cursor: pointer;
-    }
     select, input[type=text] {
-      width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,0.7);
+      width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--input-bg);
       color: var(--text); font-size: 1rem; outline: none; transition: .2s ease;
     }
     select:focus, input[type=text]:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(105,87,245,0.1); }
@@ -111,13 +146,13 @@ HTML = """
       border-radius: 12px; padding: 12px 14px; font-weight: 700; display:none;
     }
     .status.show { display:block; }
-    .progress { height: 12px; border-radius: 999px; overflow: hidden; background: rgba(105,87,245,0.08); margin-top: 8px; }
+    .progress { height: 12px; border-radius: 999px; overflow: hidden; background: var(--pill-bg); margin-top: 8px; }
     .progress > span {
       display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--primary-2));
       border-radius: 999px; transition: width .2s ease;
     }
     .metrics { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 14px; margin-top: 20px; }
-    .metric { background: rgba(255,255,255,0.7); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; min-height: 100px; display:flex; flex-direction:column; justify-content:space-between; }
+    .metric { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; min-height: 100px; display:flex; flex-direction:column; justify-content:space-between; }
     .metric .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; line-height: 1.2; }
     .metric .v { font-size: clamp(1.2rem, 1.6vw, 1.8rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1.15; margin-top: auto; padding-top: 6px; }
     .results { display:none; margin-top: 18px; gap: 14px; }
@@ -126,32 +161,26 @@ HTML = """
     .results-col { display:flex; flex-direction:column; gap: 14px; }
     #importanceList { max-height: 330px; overflow-y: auto; padding-right: 4px; }
     .section {
-      background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(245,247,255,0.72));
+      background: var(--panel-bg);
       border: 1px solid var(--line);
       border-radius: 16px;
       padding: 16px 18px 14px;
-      box-shadow: 0 8px 24px rgba(108, 92, 231, 0.05);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
       height: fit-content;
     }
     .section h2 { margin: 0 0 10px; font-size: 1.05rem; letter-spacing: -0.03em; }
     .section h4 { margin: 0 0 4px; color: var(--muted); font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
     .preview-wrap { margin-top: 10px; height: auto; max-height: 220px; overflow-x: auto; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
-    .correlation-wrap { margin-top: 10px; height: 160px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; }
-    .correlation-list { display:grid; gap: 6px; padding: 10px; min-width: 0; }
-    .corr-row { display:grid; grid-template-columns: minmax(90px, 1fr) minmax(100px, 1fr) 56px; gap: 8px; align-items:center; }
-    .corr-row > div:first-child, .corr-row > div:nth-child(2) { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .corr-bar { height: 14px; border-radius: 999px; background: rgba(105,87,245,0.10); overflow:hidden; }
-    .corr-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), var(--primary-2)); }
     .accordion details {
       border: 1px solid var(--line);
       border-radius: 12px;
-      background: rgba(255,255,255,0.64);
+      background: var(--card);
       margin-top: 8px;
       overflow: hidden;
       transition: border-color .2s ease, box-shadow .2s ease;
     }
     .accordion details[open] {
-      border-color: rgba(105,87,245,0.35);
+      border-color: var(--primary);
       box-shadow: 0 10px 24px rgba(105,87,245,0.06);
     }
     .accordion summary {
@@ -180,109 +209,27 @@ HTML = """
     .bar-list, #comparisonBars { display:grid; gap: 10px; margin-top: 10px; }
     .bar-row { display:grid; grid-template-columns: minmax(130px, 1.2fr) 2fr 64px; gap: 10px; align-items:center; }
     .bar-row > div:first-child { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .bar-track { height: 16px; border-radius: 999px; background: rgba(105,87,245,0.10); overflow:hidden; }
+    .bar-track { height: 16px; border-radius: 999px; background: var(--pill-bg); overflow:hidden; }
     .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), var(--primary-2)); }
     .tune-list { display:grid; gap: 8px; margin-top: 8px; }
     .tune-card {
       border: 1px solid var(--line);
       border-radius: 12px;
-      background: rgba(255,255,255,0.7);
+      background: var(--card);
       padding: 10px 14px;
       margin-top: 8px;
     }
     .tune-card .title { font-weight: 800; margin-bottom: 4px; }
     .tune-card .meta { color: var(--muted); font-size: .85rem; line-height: 1.45; }
     .table-wrap { height: auto; max-height: 260px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; margin-top: 10px; max-width: 100%; }
-    .compact-card {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      width: min(560px, 100%);
-      margin: 18px auto 0;
-      padding: 18px 18px 16px;
-      background: rgba(255,255,255,0.76);
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      box-shadow: var(--shadow);
-      align-self: center;
-    }
-    .compact-card .card-header {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 2px 4px 0;
-    }
-    .compact-card .card-header h4 {
-      margin: 0;
-      color: var(--muted);
-      font-size: .9rem;
-      font-weight: 600;
-    }
-    .compact-card .card-header h2 {
-      margin: 0;
-      font-size: 1.1rem;
-      line-height: 1.35;
-    }
-    .compact-card .matrix-panel,
-    .compact-card .report-panel {
-      background: rgba(255,255,255,0.55);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px;
-    }
-    .compact-card .matrix-panel {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 120px;
-    }
-    .compact-card .matrix-panel .table-wrap {
-      height: auto;
-      max-width: 100%;
-      margin: 0;
-      overflow: visible;
-      border: none;
-      border-radius: 0;
-      background: transparent;
-    }
-    .compact-card table {
-      min-width: 180px;
-      width: auto;
-      max-width: 100%;
-      margin: 0 auto;
-      background: transparent;
-    }
-    .compact-card td {
-      padding: 10px 14px;
-      border-bottom: 1px solid rgba(223,231,255,0.8);
-      text-align: center;
-    }
-    .compact-card .report-panel {
-      padding: 10px 12px;
-    }
-    .compact-card pre {
-      margin: 0;
-      font-size: .76rem;
-      line-height: 1.35;
-      white-space: pre-wrap;
-      font-family: inherit;
-      color: var(--muted);
-    }
-    table { width: 100%; min-width: 1100px; border-collapse: collapse; background: rgba(255,255,255,0.76); table-layout: auto; }
-    th, td { padding: 12px 14px; border-bottom: 1px solid rgba(223,231,255,0.8); text-align: left; white-space: nowrap; }
-    th, td { overflow: visible; }
-    th { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; }
-    .best-card { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(245,247,255,0.88)); }
-    .best-card .name { font-size: 1.2rem; font-weight: 800; margin-top: 6px; line-height: 1.2; }
-    .best-card .meta { color: var(--muted); margin-top: 8px; line-height: 1.4; }
-    .badge { display:inline-flex; align-items:center; padding: 7px 12px; border-radius: 999px; background: rgba(105,87,245,0.10); color: var(--primary); font-size: .78rem; font-weight: 800; }
+    table { width: 100%; min-width: 1100px; border-collapse: collapse; background: var(--table-bg); color: var(--text); table-layout: auto; }
     #featureForm { display: none; margin-top: 28px; }
     #featureForm .grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 16px; }
-    .input-wrap { background: rgba(255,255,255,0.7); border: 1px solid var(--line); padding: 14px; border-radius: 14px; }
+    .input-wrap { background: var(--card); border: 1px solid var(--line); padding: 14px; border-radius: 14px; }
     .input-wrap label { display:block; font-weight:700; margin-bottom:8px; color: var(--muted); }
     .input-wrap input, .input-wrap select {
       width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
-      background: rgba(255,255,255,0.85); color: var(--text); font-size: 0.95rem; font-family: inherit; outline: none; transition: .2s ease;
+      background: var(--input-bg); color: var(--text); font-size: 0.95rem; font-family: inherit; outline: none; transition: .2s ease;
     }
     .input-wrap select { cursor: pointer; }
     .input-wrap input:focus, .input-wrap select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(105,87,245,0.1); }
@@ -314,7 +261,6 @@ HTML = """
       .section h4 { font-size: .75rem; }
       .bar-row { grid-template-columns: minmax(85px, 1.1fr) 1.2fr 48px; gap: 6px; font-size: .8rem; }
       .bar-track { height: 12px; }
-      .corr-row { grid-template-columns: minmax(75px, 1fr) 1fr 44px; gap: 6px; font-size: .8rem; }
       .table-wrap, .preview-wrap { border-radius: 12px; margin-top: 8px; -webkit-overflow-scrolling: touch; }
       table { min-width: 650px; }
       th, td { padding: 9px 10px; font-size: .8rem; }
@@ -337,32 +283,41 @@ HTML = """
   <div class="wrap">
     <header class="topbar">
       <div class="brand">AutoML Studio</div>
-      <nav id="topNav" style="display:none;">
-        <button class="nav-btn active">Upload</button>
-        <button class="nav-btn">Results</button>
-        <button class="nav-btn">Predict</button>
-        <button class="nav-btn">Details</button>
-      </nav>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <nav id="topNav" style="display:flex; gap:8px;">
+          <button class="nav-btn active" type="button" onclick="navigateTo('upload', this)">Upload</button>
+          <button class="nav-btn" type="button" onclick="navigateTo('results', this)">Results</button>
+          <button class="nav-btn" type="button" onclick="navigateTo('predict', this)">Predict</button>
+          <button class="nav-btn" type="button" onclick="navigateTo('details', this)">Details</button>
+        </nav>
+        <button id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle Dark/Light Mode" style="border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:7px 14px; border-radius:10px; font-weight:700; font-size:.85rem; cursor:pointer; display:inline-flex; align-items:center; gap:7px; transition:.2s ease;">
+          <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
+        </button>
+      </div>
     </header>
 
-    <section class="hero">
+    <section class="hero" id="uploadSection">
       <div>
         <span class="tag">Python AutoML Pipeline</span>
         <h1>Train smarter. Predict faster.</h1>
         <div class="lead">Upload a dataset, auto-train multiple models, then predict instantly using the saved artifact.</div>
         <div class="pills">
           <div class="pill">Progress tracking</div>
-          <div class="pill">Report downloads</div>
+          <div class="pill">Model download</div>
           <div class="pill">Saved model</div>
-          <div class="pill">Prediction page</div>
+          <div class="pill">Instant prediction</div>
         </div>
       </div>
 
       <div class="panel">
         <h3>Dataset file</h3>
         <div class="field">
-          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" onchange="onFileSelected()" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.85); font-size:1rem; cursor:pointer;" />
-          <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:rgba(105,87,245,0.08); display:none;"></div>
+          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:1rem; cursor:pointer;" />
+          <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <span style="font-size:.78rem; font-weight:700; color:var(--muted);">Try demo:</span>
+            <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">🚢 Titanic Survival</button>
+          </div>
+          <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:var(--pill-bg); display:none;"></div>
         </div>
         <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
 
@@ -386,7 +341,26 @@ HTML = """
         <div class="preview-wrap"><table id="previewTable"></table></div>
       </div>
 
-      <div class="results-columns">
+      <div class="section" id="edaSection" style="display:none;">
+        <h4>Exploratory Data Analysis</h4>
+        <h2>Dataset Insights & Target Distribution</h2>
+        <div class="results-columns" style="margin-top:10px;">
+          <div class="results-col">
+            <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
+              <h4 style="margin:0 0 8px; color:var(--primary);">🎯 Target Class Distribution</h4>
+              <div id="targetDistChart"></div>
+            </div>
+          </div>
+          <div class="results-col">
+            <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
+              <h4 style="margin:0 0 8px; color:var(--primary);">🩺 Data Health & Missing Values</h4>
+              <div id="missingDistChart"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-columns" id="detailsSection">
         <div class="results-col">
           <div class="section">
             <h4>Model comparison</h4>
@@ -415,16 +389,44 @@ HTML = """
       </div>
 
       <div class="section">
-        <h4>Comprehensive evaluation</h4>
-        <h2>All Models Performance Leaderboard</h2>
-        <div class="tiny" style="margin-bottom:10px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4>Comprehensive evaluation</h4>
+            <h2 style="margin:0;">All Models Performance Leaderboard</h2>
+          </div>
+          <button type="button" onclick="exportLeaderboardCSV()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.82rem; font-weight:700; padding:6px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;" title="Export table data to CSV file">
+            📥 Export CSV
+          </button>
+        </div>
+        <div class="tiny" style="margin:8px 0 10px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
         <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
+      </div>
+
+      <div class="section" id="downloadSection" style="margin-top:16px; text-align:center; padding:22px 18px; background:linear-gradient(135deg, rgba(105,87,245,0.08), rgba(142,123,255,0.14)); border:1px solid var(--line); border-radius:16px;">
+        <h4 style="color:var(--primary); margin:0 0 6px;">Export Trained Model</h4>
+        <h2 style="margin:0 0 8px;">Download Model File</h2>
+        <p class="tiny" style="margin-bottom:16px;">Export your best trained model as a serialized Python pickle (.pkl) file for local inference.</p>
+        <div style="display:flex; justify-content:center;">
+          <a href="/api/download-model" class="primary-btn" style="text-decoration:none; max-width:280px; padding:12px 24px; font-size:.95rem; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+            📥 Download Model (.pkl)
+          </a>
+        </div>
       </div>
     </section>
 
     <form id="featureForm">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+        <div>
+          <h3 style="margin:0;">Instant Model Prediction</h3>
+          <div class="tiny" style="margin-top:4px;">Test your trained model immediately with new feature inputs.</div>
+        </div>
+        <button type="button" onclick="autofillSampleValues()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.85rem; font-weight:700; padding:7px 14px; cursor:pointer;" title="Fill input fields with sample values from the dataset">
+          🎲 Autofill Sample Values
+        </button>
+      </div>
       <div class="grid" id="featureGrid"></div>
       <button class="primary-btn" id="predictBtn" type="submit">Predict</button>
+      <div id="predictionResult" style="display:none; margin-top:16px; padding:16px 20px; border-radius:14px; border:1px solid var(--line); background:var(--card); text-align:center;"></div>
     </form>
 
     <footer class="footer">
@@ -433,6 +435,170 @@ HTML = """
   </div>
 
   <script>
+    function initTheme() {
+      const saved = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = saved || (prefersDark ? 'dark' : 'light');
+      applyTheme(theme);
+    }
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      const icon = document.getElementById('themeIcon');
+      const text = document.getElementById('themeText');
+      if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+      if (text) text.textContent = theme === 'dark' ? 'Light' : 'Dark';
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      applyTheme(current);
+    }
+    initTheme();
+
+    function autofillSampleValues() {
+      const preview = state.result?.dataset?.preview;
+      if (!preview || !preview.length) {
+        alert('No dataset preview available to autofill from. Please run AutoML pipeline first.');
+        return;
+      }
+      const sample = preview[0];
+      for (const el of document.querySelectorAll('#featureGrid input, #featureGrid select')) {
+        if (sample[el.name] !== undefined && sample[el.name] !== null) {
+          el.value = sample[el.name];
+        }
+      }
+    }
+
+    function exportLeaderboardCSV() {
+      const table = document.getElementById('comparisonTable');
+      if (!table || !table.rows || !table.rows.length) {
+        alert('No leaderboard data available to export.');
+        return;
+      }
+      const lines = [];
+      for (const row of table.rows) {
+        const rowVals = Array.from(row.cells).map(cell => `"${(cell.innerText || '').trim().replace(/"/g, '""')}"`);
+        lines.push(rowVals.join(','));
+      }
+      const blob = new Blob([lines.join(String.fromCharCode(10))], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'model_leaderboard.csv';
+      link.click();
+    }
+
+    async function loadDemo(name) {
+      if (fileNotice) {
+        fileNotice.style.display = 'block';
+        fileNotice.style.background = 'var(--pill-bg)';
+        fileNotice.style.color = 'var(--primary)';
+        fileNotice.innerHTML = '⏳ Loading demo dataset...';
+      }
+      try {
+        const res = await fetch('/api/load-demo?name=' + encodeURIComponent(name));
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Failed to load demo dataset');
+        }
+        const data = await res.json();
+        state.file = null;
+        state.file_id = data.file_id;
+        state.uploadPromise = Promise.resolve(data.file_id);
+        fileInput.value = '';
+        const cols = data.columns || [];
+        targetInput.innerHTML = cols.map(c => `<option value="${c}"${c === data.default_target ? ' selected' : ''}>${c}</option>`).join('');
+        if (data.default_target) targetInput.value = data.default_target;
+        if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(29,191,115,0.08)';
+          fileNotice.style.color = '#0f8d56';
+          fileNotice.innerHTML = '⚡ <strong>' + data.label + ' demo loaded!</strong> Target <code>' + data.default_target + '</code> selected. Click <strong>Run AutoML Pipeline</strong> to start.';
+        }
+      } catch (e) {
+        if (fileNotice) {
+          fileNotice.style.display = 'block';
+          fileNotice.style.background = 'rgba(239,68,68,0.1)';
+          fileNotice.style.color = '#dc2626';
+          fileNotice.innerHTML = '❌ <strong>Error:</strong> ' + e.message;
+        }
+      }
+    }
+
+    function navigateTo(target, btn) {
+      document.querySelectorAll('#topNav .nav-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      if (target === 'upload') {
+        const el = document.getElementById('uploadSection') || document.querySelector('.hero');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+
+      const resBox = document.getElementById('results');
+      const isReady = resBox && resBox.classList.contains('show');
+
+      if (target === 'results') {
+        if (!isReady) {
+          alert('Please run the AutoML pipeline first to view results.');
+          const el = document.getElementById('uploadSection');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        const el = document.getElementById('metrics') || resBox;
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      } else if (target === 'predict') {
+        const form = document.getElementById('featureForm');
+        if (!isReady || !form || form.style.display !== 'block') {
+          alert('Please run the AutoML pipeline first to train a model and enable predictions.');
+          const el = document.getElementById('uploadSection');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        form.scrollIntoView({ behavior: 'smooth' });
+      } else if (target === 'details') {
+        if (!isReady) {
+          alert('Please run the AutoML pipeline first to view model and preprocessing details.');
+          const el = document.getElementById('uploadSection');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        const el = document.getElementById('detailsSection') || document.getElementById('prepAccordion');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    window.addEventListener('scroll', () => {
+      const scrollPos = window.scrollY + 140;
+      const resBox = document.getElementById('results');
+      const isReady = resBox && resBox.classList.contains('show');
+      if (!isReady) return;
+
+      const form = document.getElementById('featureForm');
+      const details = document.getElementById('detailsSection');
+      const results = document.getElementById('metrics');
+      const upload = document.getElementById('uploadSection');
+
+      let current = 'upload';
+      if (form && form.style.display === 'block' && scrollPos >= form.offsetTop) {
+        current = 'predict';
+      } else if (details && scrollPos >= details.offsetTop) {
+        current = 'details';
+      } else if (results && scrollPos >= results.offsetTop) {
+        current = 'results';
+      } else if (upload && scrollPos >= upload.offsetTop) {
+        current = 'upload';
+      }
+
+      document.querySelectorAll('#topNav .nav-btn').forEach(btn => {
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        if (onclickAttr.indexOf("'" + current + "'") !== -1) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    });
+
     const state = { result: null, file: null };
 
     const fileInput = document.getElementById('fileInput');
@@ -441,7 +607,6 @@ HTML = """
     const metrics = document.getElementById('metrics');
     const results = document.getElementById('results');
     const previewTable = document.getElementById('previewTable');
-    const correlationList = document.getElementById('correlationList');
     const prepAccordion = document.getElementById('prepAccordion');
     const bestCard = document.getElementById('bestCard');
     const comparisonBars = document.getElementById('comparisonBars');
@@ -759,19 +924,28 @@ HTML = """
         return;
       }
 
-      let alertMsg = '🎯 Prediction: ' + predLabel;
-      if (data?.probabilities && Object.keys(data.probabilities).length) {
-        const probs = Object.entries(data.probabilities)
-          .map(([k, v]) => `Class ${k}: ${(Number(v) * 100).toFixed(1)}%`)
-          .join(' | ');
-        alertMsg += '\\n\\nProbability Confidence:\\n' + probs;
+      const resBox = document.getElementById('predictionResult');
+      if (resBox) {
+        resBox.style.display = 'block';
+        let html = `<div style="font-size:1.25rem; font-weight:800; color:var(--primary);">🎯 Predicted Result: <span style="color:var(--text);">${predLabel}</span></div>`;
+        if (data?.probabilities && Object.keys(data.probabilities).length) {
+          html += `<div style="margin-top:12px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">`;
+          for (const [cls, prob] of Object.entries(data.probabilities)) {
+            const pct = (Number(prob) * 100).toFixed(1);
+            html += `<span class="pill" style="padding:5px 12px; font-size:.8rem;">Class <strong>${cls}</strong>: ${pct}%</span>`;
+          }
+          html += `</div>`;
+        }
+        resBox.innerHTML = html;
+        resBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        alert('🎯 Prediction: ' + predLabel);
       }
-      alert(alertMsg);
     });
 
     function renderMetrics(summary) {
       const missingValueLabel = Number(summary.missing_values || 0) === 0 ? 'No missing values' : (summary.missing_values || 0);
-      const metricValue = formatSummaryMetric(summary.best_metric_label, summary.best_metric_value ?? summary.best_metric ?? '—');
+      const metricValue = formatMetric(summary.best_metric_value ?? summary.best_metric ?? '—', summary.best_metric_label);
       const cards = [
         ['Problem type', summary.problem_type || 'Classification'],
         ['Rows', summary.rows || 0],
@@ -807,30 +981,24 @@ HTML = """
         comparisonTable.innerHTML = '<tbody><tr><td class="tiny">No model comparisons available.</td></tr></tbody>';
       }
 
-      const importance = payload.feature_importance || {};
-      const correlationPairs = payload.dataset?.correlation_pairs || [];
-      const options = [
-        ...Object.keys(importance),
-        'Correlation'
-      ];
-      const firstModel = options[0] || 'Correlation';
-      importanceBox.innerHTML = `<div class="field"><label class="label">Model</label><select id="importanceModel">${options.map((name) => `<option value="${name}">${name}</option>`).join('')}</select></div><div id="importanceList"></div>`;
-      const drawImportance = (name) => {
-        if (name === 'Correlation') {
-          if (!correlationPairs.length) {
-            document.getElementById('importanceList').innerHTML = '<div class="tiny">No numeric correlation data available.</div>';
-            return;
-          }
-          const maxValue = Math.max(...correlationPairs.map((row) => Number(row.correlation) || 0), 1);
-          document.getElementById('importanceList').innerHTML = correlationPairs.map((row) => `<div class="corr-row"><div>${row.feature_a}</div><div class="corr-bar"><div class="corr-fill" style="width:${Math.max((Number(row.correlation) / maxValue) * 100, 4)}%"></div></div><div>${(Number(row.correlation) || 0).toFixed(2)}</div><div style="grid-column:1 / -1; color:var(--muted); font-size:.82rem; margin-top:-4px;">${row.feature_b}</div></div>`).join('');
-          return;
-        }
+      renderEda(payload.eda);
 
-        const rows = (importance[name] || []).slice(0, 10);
-        document.getElementById('importanceList').innerHTML = rows.length ? `<div class="bar-list">${rows.map((row) => `<div class="bar-row"><div>${row.feature}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max((Number(row.importance) || 0) * 100, 4)}%"></div></div><div>${(Number(row.importance) * 100 || 0).toFixed(1)}%</div></div>`).join('')}</div>` : '<div class="tiny">No feature-importance data for this model.</div>';
-      };
-      drawImportance(firstModel);
-      document.getElementById('importanceModel').onchange = (e) => drawImportance(e.target.value);
+      const importance = payload.feature_importance || {};
+      const options = Object.keys(importance);
+      if (!options.length) {
+        importanceBox.innerHTML = '<div class="tiny">No feature-importance data available.</div>';
+      } else {
+        const firstModel = options[0];
+        importanceBox.innerHTML = `<div class="field"><label class="label">Model</label><select id="importanceModel">${options.map((name) => `<option value="${name}">${name}</option>`).join('')}</select></div><div id="importanceList"></div>`;
+        const drawImportance = (name) => {
+          const rows = (importance[name] || []).slice(0, 10);
+          document.getElementById('importanceList').innerHTML = rows.length
+            ? `<div class="bar-list">${rows.map((row) => `<div class="bar-row"><div>${row.feature}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max((Number(row.importance) || 0) * 100, 4)}%"></div></div><div>${(Number(row.importance) * 100 || 0).toFixed(1)}%</div></div>`).join('')}</div>`
+            : '<div class="tiny">No feature-importance data for this model.</div>';
+        };
+        drawImportance(firstModel);
+        document.getElementById('importanceModel').onchange = (e) => drawImportance(e.target.value);
+      }
 
       const tuningSummary = payload.tuning_summary || {};
       const tunedModels = Object.entries(tuningSummary)
@@ -841,22 +1009,101 @@ HTML = """
         : '<div class="tiny">No tuned models were retained.</div>';
     }
 
+    function renderEda(eda) {
+      const edaSection = document.getElementById('edaSection');
+      if (!edaSection) return;
+      if (!eda || (!eda.target_distribution && !eda.missing_distribution)) {
+        edaSection.style.display = 'none';
+        return;
+      }
+      edaSection.style.display = 'block';
+
+      const targetDistChart = document.getElementById('targetDistChart');
+      const targetData = eda.target_distribution || {};
+      const targetEntries = Object.entries(targetData);
+      if (!targetEntries.length) {
+        targetDistChart.innerHTML = '<div class="tiny">No target distribution data available.</div>';
+      } else {
+        const totalCount = targetEntries.reduce((sum, [, c]) => sum + Number(c), 0) || 1;
+        const maxCount = Math.max(...targetEntries.map(([, c]) => Number(c)), 1);
+        const dominantRatio = maxCount / totalCount;
+        let imbalanceAlert = '';
+        if (targetEntries.length >= 2 && dominantRatio >= 0.75) {
+          const dominantEntry = targetEntries.find(([, c]) => Number(c) === maxCount);
+          const domPct = (dominantRatio * 100).toFixed(1);
+          imbalanceAlert = `
+            <div style="margin-bottom:10px; padding:8px 12px; border-radius:10px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); color:#d97706; font-size:.8rem; font-weight:600; display:flex; align-items:center; gap:6px;">
+              <span>⚠️</span>
+              <span><strong>Imbalanced Target:</strong> Class "${dominantEntry ? dominantEntry[0] : ''}" is ${domPct}%. F1-Score & ROC-AUC are prioritized over Accuracy.</span>
+            </div>
+          `;
+        }
+        targetDistChart.innerHTML = `
+          ${imbalanceAlert}
+          <div style="font-size:.82rem; color:var(--muted); margin-bottom:10px;">Total labeled samples: <strong>${totalCount.toLocaleString()}</strong></div>
+          <div class="bar-list">
+            ${targetEntries.map(([label, count]) => {
+              const pct = ((Number(count) / totalCount) * 100).toFixed(1);
+              const barWidth = Math.max((Number(count) / maxCount) * 100, 6);
+              return `
+                <div class="bar-row">
+                  <div style="font-weight:600;" title="${label}">${label}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${barWidth}%;"></div></div>
+                  <div><strong>${pct}%</strong> <span style="color:var(--muted); font-size:.78rem;">(${Number(count).toLocaleString()})</span></div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      const missingDistChart = document.getElementById('missingDistChart');
+      const missingList = eda.missing_distribution || [];
+      const totalMissing = eda.total_missing || 0;
+      const numNum = eda.num_numerical_cols || 0;
+      const numCat = eda.num_categorical_cols || 0;
+
+      let compositionHtml = `
+        <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+          <div style="background:rgba(105,87,245,0.08); padding:6px 12px; border-radius:10px; font-size:.82rem;">
+            🔢 Numerical: <strong>${numNum}</strong>
+          </div>
+          <div style="background:rgba(29,191,115,0.08); padding:6px 12px; border-radius:10px; font-size:.82rem;">
+            🔤 Categorical: <strong>${numCat}</strong>
+          </div>
+          <div style="background:${totalMissing === 0 ? 'rgba(29,191,115,0.08)' : 'rgba(239,68,68,0.08)'}; padding:6px 12px; border-radius:10px; font-size:.82rem; color:${totalMissing === 0 ? '#0f8d56' : '#dc2626'};">
+            ${totalMissing === 0 ? '✓ Zero Missing Values' : `⚠️ ${totalMissing} Missing Values`}
+          </div>
+        </div>
+      `;
+
+      if (missingList.length === 0) {
+        missingDistChart.innerHTML = compositionHtml + `
+          <div style="padding:14px; background:rgba(29,191,115,0.06); border:1px solid rgba(29,191,115,0.2); border-radius:10px; color:#0f8d56; font-size:.86rem; text-align:center;">
+            ✨ <strong>100% Complete Data!</strong> No missing values detected in any feature.
+          </div>
+        `;
+      } else {
+        missingDistChart.innerHTML = compositionHtml + `
+          <div style="font-size:.82rem; color:var(--muted); margin-bottom:6px;">Top columns with missing data:</div>
+          <div class="bar-list">
+            ${missingList.map((m) => `
+              <div class="bar-row">
+                <div title="${m.column}">${m.column}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.max(m.percentage, 4)}%; background:linear-gradient(90deg, #f59e0b, #ef4444);"></div></div>
+                <div><span style="color:#dc2626; font-weight:600;">${m.percentage}%</span> <span style="color:var(--muted); font-size:.78rem;">(${m.missing_count})</span></div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+    }
+
     function formatBlock(value) {
       if (!value || (Array.isArray(value) && !value.length)) return '<div class="tiny">None</div>';
       if (Array.isArray(value)) return value.map((item) => `<div>${item}</div>`).join('');
       if (typeof value === 'object') return Object.entries(value).map(([k, v]) => `<div><strong>${k}</strong>: ${v}</div>`).join('');
       return `<div>${value}</div>`;
-    }
-
-    function formatSummaryMetric(label, value) {
-      if (value === null || value === undefined || value === '—') return '—';
-      const numeric = Number(value);
-      if (Number.isNaN(numeric)) return value;
-      const metricLabel = String(label || '').toLowerCase();
-      if (metricLabel.includes('accuracy') || metricLabel.includes('precision') || metricLabel.includes('recall') || metricLabel.includes('f1') || metricLabel.includes('roc')) {
-        return (numeric * 100).toFixed(2) + '%';
-      }
-      return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
     }
 
     function renderPreview(rows) {
@@ -868,20 +1115,15 @@ HTML = """
       previewTable.innerHTML = `<thead><tr>${columns.map((col) => `<th>${col}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((col) => `<td>${row[col] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>`;
     }
 
-    function metricLabel(payload) {
-      return payload.best_model?.Model ? (payload.primary_metric || 'Accuracy') : 'Accuracy';
-    }
-
     function formatMetric(value, key) {
-      if (typeof value === 'number') {
-        if (Number.isInteger(value)) return String(value);
-        const k = String(key || '').toLowerCase();
-        if (k.includes('acc') || k.includes('f1') || k.includes('prec') || k.includes('rec') || k.includes('auc') || k.includes('roc')) {
-          return (value * 100).toFixed(2) + '%';
-        }
-        return value.toFixed(4);
+      if (value === null || value === undefined || value === '—') return '—';
+      const n = Number(value);
+      if (isNaN(n)) return String(value);
+      const k = String(key || '').toLowerCase();
+      if (k.includes('acc') || k.includes('f1') || k.includes('prec') || k.includes('rec') || k.includes('auc') || k.includes('roc')) {
+        return (n * 100).toFixed(2) + '%';
       }
-      return value ?? '—';
+      return Number.isInteger(n) ? String(n) : n.toFixed(4);
     }
 
     function renderFeatureFields(schemaOrNames) {
@@ -936,39 +1178,6 @@ def home() -> str:
 ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.json'}
 
 
-@app.post('/api/columns')
-async def detect_columns(file: UploadFile = File(...)):
-    suffix = Path(file.filename or 'data.csv').suffix.lower()
-    if suffix not in ALLOWED_EXTENSIONS:
-        return JSONResponse(
-            content={'detail': f"Unsupported file type '{suffix or 'none'}'. Supported formats: .csv, .xlsx, .xls, .json"},
-            status_code=400,
-        )
-    raw = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '.csv') as tmp:
-        tmp.write(raw)
-        path = tmp.name
-    try:
-        if suffix in {'.csv', ''}:
-            df = pd.read_csv(path, nrows=0)
-        elif suffix in {'.xlsx', '.xls'}:
-            df = pd.read_excel(path, nrows=0)
-        elif suffix == '.json':
-            try:
-                df = pd.read_json(path, nrows=1)
-            except Exception:
-                df = pd.read_json(path)
-        columns = [str(c).strip() for c in df.columns]
-        if not columns:
-            return JSONResponse(content={'detail': 'No columns found in dataset'}, status_code=400)
-        return JSONResponse(content=columns)
-    except Exception as e:
-        return JSONResponse(content={'detail': f'Error reading columns: {str(e)}'}, status_code=400)
-    finally:
-        if os.path.exists(path):
-            os.remove(path)
-
-
 @app.post('/api/upload')
 async def upload_file(file: UploadFile = File(...)):
     suffix = Path(file.filename or 'data.csv').suffix.lower()
@@ -999,8 +1208,35 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         if os.path.exists(dest):
             os.remove(dest)
-        return JSONResponse({'detail': f'Failed to parse dataset: {str(e)}'}, status_code=400)
     return JSONResponse({'file_id': file_id, 'filename': file.filename or 'data.csv', 'columns': columns})
+
+
+DEMO_FILES = {
+    'titanic': {'file': 'titanic_survival.csv', 'label': 'Titanic Survival'},
+}
+
+
+@app.get('/api/load-demo')
+async def load_demo_dataset(name: str):
+    info = DEMO_FILES.get(name.lower())
+    if not info:
+        return JSONResponse({'detail': f'Demo dataset "{name}" not found.'}, status_code=400)
+    src = DEMO_DIR / info['file']
+    if not src.exists():
+        return JSONResponse({'detail': f'Demo file "{info["file"]}" is missing on server.'}, status_code=404)
+    file_id = str(uuid.uuid4())
+    dest = UPLOAD_DIR / f"{file_id}.csv"
+    shutil.copyfile(src, dest)
+    df = pd.read_csv(dest, nrows=5)
+    cols = [str(c).strip() for c in df.columns]
+    target = detect_default_target(cols)
+    return JSONResponse({
+        'file_id': file_id,
+        'filename': info['file'],
+        'columns': cols,
+        'default_target': target,
+        'label': info['label'],
+    })
 
 
 @app.get('/api/train-stream')
@@ -1057,56 +1293,6 @@ async def train_stream(file_id: str, target: str | None = None):
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
-def _detect_default_target(columns: list[str]) -> str | None:
-    return detect_default_target(columns)
-
-
-@app.post('/api/train')
-async def train(file: UploadFile = File(...), target_column: str = Form(None)):
-    raw = await file.read()
-    suffix = Path(file.filename or 'data.csv').suffix.lower() or '.csv'
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(raw)
-        path = tmp.name
-    try:
-        # try to read columns and pick a default if the provided target is missing
-        try:
-            df = pd.read_csv(path) if suffix in {'.csv', ''} else pd.read_excel(path)
-            cols = list(df.columns)
-        except Exception:
-            cols = []
-        if not target_column or (cols and target_column not in cols):
-            detected = _detect_default_target(cols)
-            if detected:
-                target_column = detected
-
-        result = _build_pipeline_result(
-            job_id=str(uuid.uuid4()),
-            file_path=path,
-            target_column=target_column,
-            progress_callback=None,
-        )
-        summary = result.get('dashboard_summary', {})
-        MODEL_STATE.clear()
-        MODEL_STATE.update(result)
-        return {
-            'summary': {
-                'problem_type': summary.get('problem_type', result.get('problem_type', 'Classification')),
-                'rows': summary.get('rows', result.get('dataset', {}).get('rows', 0)),
-                'columns': summary.get('columns', result.get('dataset', {}).get('columns', 0)),
-                'missing_values': summary.get('missing_values', result.get('dataset', {}).get('missing_values_total', 0)),
-                'best_model': summary.get('best_model', result.get('best_model_name', '—')),
-                'best_metric': summary.get('best_metric_value', '—'),
-            },
-            'feature_names': result.get('selected_feature_names') or result.get('feature_names', []),
-            'feature_schema': result.get('feature_schema', []),
-            'detected_target': target_column,
-        }
-    finally:
-        if os.path.exists(path):
-            os.remove(path)
-
-
 @app.post('/api/predict')
 async def predict(payload: dict):
     model = MODEL_STATE.get('best_model_object')
@@ -1142,6 +1328,27 @@ async def predict(payload: dict):
     target_mapping = MODEL_STATE.get('target_label_mapping') or {}
     pred_label = target_mapping.get(str(pred), str(pred))
     return {'prediction': pred, 'prediction_label': pred_label, 'probabilities': probs}
+
+
+@app.get('/api/download-model')
+async def download_model():
+    from fastapi.responses import Response
+    import pickle
+
+    model = MODEL_STATE.get('best_model_object')
+    if model is None:
+        return JSONResponse(
+            {'detail': 'No trained model available to download. Please run the AutoML pipeline first.'},
+            status_code=400,
+        )
+
+    best_name = str(MODEL_STATE.get('best_model_name', 'model')).replace(' ', '_').lower()
+    return Response(
+        content=pickle.dumps(model),
+        media_type='application/octet-stream',
+        headers={'Content-Disposition': f'attachment; filename="{best_name}.pkl"'},
+    )
+
 
 
 if __name__ == '__main__':

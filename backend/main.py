@@ -511,11 +511,46 @@ def _build_pipeline_result(
         "best_metric_value": _safe_float(best_metric_value),
     }
 
+    # Exploratory Data Analysis (EDA) summary
+    target_distribution = {}
+    if problem_type == "classification":
+        raw_counts = y.value_counts().to_dict()
+        inv_map = {v: k for k, v in target_mapping.items()} if target_mapping else {}
+        for cls_code, count in raw_counts.items():
+            label = str(inv_map.get(cls_code, cls_code))
+            target_distribution[label] = int(count)
+    else:
+        try:
+            bins = pd.cut(y, bins=5, precision=1).value_counts().sort_index()
+            target_distribution = {str(interval): int(count) for interval, count in bins.items()}
+        except Exception:
+            target_distribution = {}
+
+    col_missing = original_df.isna().sum()
+    col_missing_pct = ((col_missing / max(len(original_df), 1)) * 100).round(1).to_dict()
+    missing_chart_data = [
+        {"column": str(c), "missing_count": int(col_missing[c]), "percentage": float(col_missing_pct[c])}
+        for c in col_missing.index
+        if col_missing[c] > 0
+    ]
+    missing_chart_data = sorted(missing_chart_data, key=lambda x: x["missing_count"], reverse=True)[:10]
+
+    eda_summary = {
+        "target_distribution": target_distribution,
+        "missing_distribution": missing_chart_data,
+        "num_numerical_cols": int(len(original_df.select_dtypes(include=np.number).columns)),
+        "num_categorical_cols": int(len(original_df.select_dtypes(exclude=np.number).columns)),
+        "total_missing": int(col_missing.sum()),
+        "total_rows": int(len(original_df)),
+        "total_columns": int(len(original_df.columns)),
+    }
+
     _emit_progress(progress_callback, 100, "Pipeline completed")
 
     return {
         "job_id": job_id,
         "problem_type": problem_type,
+        "eda": _to_serializable(eda_summary),
         "metric_options": metric_options,
         "primary_metric": primary_metric,
         "leaderboard_metrics": leaderboard_metrics,
