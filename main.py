@@ -82,6 +82,7 @@ HTML = """
       --pill-bg: rgba(129, 140, 248, 0.14);
       --pill-border: rgba(129, 140, 248, 0.25);
     }
+    *, *::before, *::after { box-sizing: border-box; }
     html, body {
       margin: 0; padding: 0; width: 100%; max-width: 100%; overflow-x: hidden;
       font-family: Inter, Arial, sans-serif; background: var(--bg-gradient);
@@ -92,20 +93,22 @@ HTML = """
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
       background: var(--card); border: 1px solid var(--line); border-radius: 18px;
-      box-shadow: var(--shadow); padding: 15px 22px; margin-bottom: 20px;
+      box-shadow: var(--shadow); padding: 12px 20px; margin-bottom: 20px;
       backdrop-filter: blur(10px);
       position: sticky; top: 12px; z-index: 100;
+      gap: 12px;
     }
     .hero, .results, #featureForm, #metrics, .section, #detailsSection {
       scroll-margin-top: 90px;
     }
-    .brand { font-size: 2rem; font-weight: 800; letter-spacing: -0.06em; color: var(--primary); }
-    nav { display: flex; gap: 10px; }
+    .brand { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.05em; color: var(--primary); white-space: nowrap; order: 1; }
+    nav { display: flex; gap: 6px; order: 2; }
     .nav-btn {
-      border: none; background: transparent; color: var(--muted); padding: 8px 12px; border-radius: 10px;
-      font-weight: 700; cursor: pointer; transition: .2s ease; 
+      border: none; background: transparent; color: var(--muted); padding: 7px 12px; border-radius: 10px;
+      font-weight: 700; cursor: pointer; transition: .2s ease; font-size: .88rem;
     }
     .nav-btn.active, .nav-btn:hover { background: var(--pill-bg); color: var(--primary); }
+    #themeToggle { order: 3; }
     .hero {
       display: grid; grid-template-columns: 1.3fr 0.9fr; gap: 26px; background: var(--card);
       border: 1px solid var(--line); border-radius: 28px; padding: 34px 30px; box-shadow: var(--shadow);
@@ -299,30 +302,59 @@ HTML = """
       .results-columns { grid-template-columns: 1fr !important; }
       #featureForm .grid { grid-template-columns: 1fr; }
     }
+    @media (max-width: 768px) {
+      .topbar {
+        flex-wrap: wrap;
+        padding: 10px 14px;
+        border-radius: 14px;
+        top: 8px;
+        margin-bottom: 14px;
+        gap: 8px 10px;
+      }
+      .brand { font-size: 1.25rem; order: 1; }
+      #themeToggle { order: 2; padding: 5px 10px !important; font-size: .8rem !important; }
+      nav {
+        order: 3;
+        width: 100%;
+        display: flex;
+        gap: 4px;
+        justify-content: space-between;
+        border-top: 1px solid var(--line);
+        padding-top: 6px;
+      }
+      .nav-btn {
+        flex: 1;
+        padding: 6px 4px;
+        font-size: .78rem;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .hero, .results, #featureForm, #metrics, .section, #detailsSection {
+        scroll-margin-top: 110px;
+      }
+    }
     @media (max-width: 640px) {
-      .wrap { padding: 0 12px 30px; margin: 8px auto; }
-      .topbar { padding: 12px 16px; border-radius: 14px; margin-bottom: 14px; }
-      .brand { font-size: 1.4rem; }
-      .hero { padding: 18px 16px; border-radius: 18px; gap: 16px; }
-      h1 { font-size: 2rem; margin: 12px 0 10px; }
-      .lead { font-size: 1.05rem; line-height: 1.35; }
-      .pills { gap: 6px; margin-top: 14px; }
-      .pill { padding: 6px 10px; font-size: .75rem; }
-      .panel { padding: 16px; border-radius: 16px; }
-      .primary-btn { padding: 14px 16px; font-size: 1rem; }
-      .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
-      .metric { padding: 12px; min-height: 80px; border-radius: 14px; }
-      .metric .k { font-size: .65rem; }
-      .metric .v { font-size: 1.25rem; }
+      .wrap { padding: 0 10px 30px; margin: 6px auto; }
+      .hero { padding: 18px 14px; border-radius: 18px; gap: 16px; }
+      h1 { font-size: 1.85rem; margin: 12px 0 10px; }
+      .lead { font-size: 1rem; line-height: 1.35; }
+      .pills { gap: 6px; margin-top: 12px; }
+      .pill { padding: 5px 9px; font-size: .72rem; }
+      .panel { padding: 14px; border-radius: 16px; }
+      .primary-btn { padding: 13px 16px; font-size: .95rem; }
+      .metrics { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
+      .metric { padding: 10px 12px; min-height: 75px; border-radius: 12px; }
+      .metric .k { font-size: .62rem; }
+      .metric .v { font-size: 1.15rem; }
       .results { margin-top: 14px; gap: 12px; }
-      .section { padding: 14px 14px 12px; border-radius: 14px; }
+      .section { padding: 14px 12px; border-radius: 14px; }
       .section h2 { font-size: 1rem; margin-bottom: 8px; }
       .section h4 { font-size: .75rem; }
-      .bar-row { grid-template-columns: minmax(85px, 1.1fr) 1.2fr 48px; gap: 6px; font-size: .8rem; }
+      .bar-row { grid-template-columns: minmax(80px, 1fr) 1.2fr 44px; gap: 6px; font-size: .78rem; }
       .bar-track { height: 12px; }
-      .table-wrap, .preview-wrap { border-radius: 12px; margin-top: 8px; -webkit-overflow-scrolling: touch; }
-      table { min-width: 650px; }
-      th, td { padding: 9px 10px; font-size: .8rem; }
+      .table-wrap, .preview-wrap { border-radius: 12px; margin-top: 8px; }
+      table { min-width: 500px; }
+      thead th, tbody td { padding: 8px 10px; font-size: .78rem; }
     }
     .footer {
       margin-top: 40px;
@@ -342,17 +374,15 @@ HTML = """
   <div class="wrap">
     <header class="topbar">
       <div class="brand">AutoML Studio</div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <nav id="topNav" style="display:flex; gap:8px;">
-          <button class="nav-btn active" type="button" onclick="navigateTo('upload', this)">Upload</button>
-          <button class="nav-btn" type="button" onclick="navigateTo('results', this)">Results</button>
-          <button class="nav-btn" type="button" onclick="navigateTo('predict', this)">Predict</button>
-          <button class="nav-btn" type="button" onclick="navigateTo('details', this)">Details</button>
-        </nav>
-        <button id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle Dark/Light Mode" style="border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:7px 14px; border-radius:10px; font-weight:700; font-size:.85rem; cursor:pointer; display:inline-flex; align-items:center; gap:7px; transition:.2s ease;">
-          <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
-        </button>
-      </div>
+      <nav id="topNav">
+        <button class="nav-btn active" type="button" onclick="navigateTo('upload', this)">Upload</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('results', this)">Results</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('predict', this)">Predict</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('details', this)">Details</button>
+      </nav>
+      <button id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle Dark/Light Mode" style="border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:7px 12px; border-radius:10px; font-weight:700; font-size:.82rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:.2s ease; white-space:nowrap;">
+        <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
+      </button>
     </header>
 
     <section class="hero" id="uploadSection">
@@ -371,7 +401,7 @@ HTML = """
       <div class="panel">
         <h3>Dataset file</h3>
         <div class="field">
-          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:1rem; cursor:pointer;" />
+          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; max-width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:.88rem; cursor:pointer;" />
           <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
             <span style="font-size:.78rem; font-weight:700; color:var(--muted);">Try demo:</span>
             <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">Titanic Survival</button>
@@ -461,15 +491,16 @@ HTML = """
         <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
       </div>
 
-      <div class="section" id="downloadSection" style="max-width:760px; margin:16px auto 0; text-align:center; padding:18px 16px; background:linear-gradient(135deg, rgba(105,87,245,0.08), rgba(142,123,255,0.14)); border:1px solid var(--line); border-radius:16px;">
-        <h4 style="color:var(--primary); margin:0 0 6px;">Export Trained Model</h4>
-        <h2 style="margin:0 0 8px;">Download Model File</h2>
-        <p class="tiny" style="margin-bottom:16px;">Export your best trained model as a serialized Python pickle (.pkl) file for local inference.</p>
-        <div style="display:flex; justify-content:center;">
-          <a href="/api/download-model" class="primary-btn" style="text-decoration:none; max-width:220px; padding:10px 18px; font-size:.92rem; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-            📥 Download Model (.pkl)
-          </a>
+      <div class="section" id="downloadSection" style="margin:14px 0 0; padding:14px 18px; background:linear-gradient(135deg, rgba(105,87,245,0.06), rgba(142,123,255,0.1)); border:1px solid var(--line); border-radius:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div>
+          <div style="font-weight:800; font-size:.95rem; color:var(--text); display:flex; align-items:center; gap:6px;">
+            <span>📦</span> <strong>Export Best Model</strong>
+          </div>
+          <div style="font-size:.8rem; color:var(--muted); margin-top:2px;">Download serialized Python pickle (<code style="font-size:.78rem; background:var(--code-bg); padding:1px 5px; border-radius:4px;">.pkl</code>) for offline inference.</div>
         </div>
+        <a href="/api/download-model" class="primary-btn" style="width:auto; margin:0; text-decoration:none; padding:9px 18px; font-size:.88rem; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; white-space:nowrap;">
+          📥 Download Model (.pkl)
+        </a>
       </div>
     </section>
 
