@@ -209,6 +209,113 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _build_dataset_profile(
+    original_df: pd.DataFrame,
+    target_column: str,
+    dropped_columns: list[str],
+    dropped_column_reasons: dict[str, str],
+    problem_type: str,
+    duplicate_rows: int,
+) -> dict[str, Any]:
+    total_rows = len(original_df)
+    total_cols = len(original_df.columns)
+    total_cells = total_rows * total_cols
+    total_missing_cells = int(original_df.isna().sum().sum())
+    missing_cell_pct = round((total_missing_cells / max(total_cells, 1)) * 100, 2)
+    quality_score = max(0, min(100, round(100.0 - (missing_cell_pct * 0.7 + (duplicate_rows / max(total_rows, 1)) * 30.0), 1)))
+
+    target_norm = str(target_column).strip().lower().replace(" ", "_")
+    dropped_norm = [str(c).strip().lower().replace(" ", "_") for c in dropped_columns]
+
+    column_profiles = []
+    for col in original_df.columns:
+        s = original_df[col]
+        dtype_str = str(s.dtype)
+        is_num = bool(pd.api.types.is_numeric_dtype(s))
+        null_cnt = int(s.isna().sum())
+        null_pct = round((null_cnt / max(total_rows, 1)) * 100, 1)
+        unique_cnt = int(s.nunique(dropna=True))
+        unique_pct = round((unique_cnt / max(total_rows, 1)) * 100, 1)
+        sample_vals = [str(x) for x in s.dropna().unique()[:4]]
+
+        col_norm = str(col).strip().lower().replace(" ", "_")
+        col_lower = str(col).strip().lower()
+        target_lower = str(target_column).strip().lower()
+        if col == target_column or col_lower == target_lower or col_norm == target_norm:
+            role = "target"
+            note = f"🎯 Target Variable ({problem_type.title()})"
+        elif col in dropped_columns or col_norm in dropped_norm:
+            role = "dropped"
+            note = dropped_column_reasons.get(col) or dropped_column_reasons.get(col_norm) or "Excluded during data cleaning"
+        else:
+            role = "feature"
+            note = "⚡ Modeled Feature"
+
+        column_profiles.append({
+            "name": str(col),
+            "dtype": dtype_str,
+            "type_category": "Numeric" if is_num else "Categorical",
+            "null_count": null_cnt,
+            "null_pct": null_pct,
+            "filled_pct": round(100.0 - null_pct, 1),
+            "unique_count": unique_cnt,
+            "unique_pct": unique_pct,
+            "sample_values": sample_vals,
+            "role": role,
+            "note": str(note),
+        })
+
+    # Numerical statistics (describe)
+    num_df = original_df.select_dtypes(include=np.number)
+    describe_numerical = []
+    if not num_df.empty:
+        desc = num_df.describe().T
+        for col_name, row in desc.iterrows():
+            describe_numerical.append({
+                "column": str(col_name),
+                "count": int(row.get("count", 0)),
+                "mean": round(float(row.get("mean", 0)), 2),
+                "std": round(float(row.get("std", 0)), 2),
+                "min": round(float(row.get("min", 0)), 2),
+                "q25": round(float(row.get("25%", 0)), 2),
+                "median": round(float(row.get("50%", 0)), 2),
+                "q75": round(float(row.get("75%", 0)), 2),
+                "max": round(float(row.get("max", 0)), 2),
+            })
+
+    # Categorical statistics (describe)
+    cat_df = original_df.select_dtypes(exclude=np.number)
+    describe_categorical = []
+    if not cat_df.empty:
+        for col_name in cat_df.columns:
+            s = cat_df[col_name].dropna()
+            vc = s.value_counts()
+            top_val = str(vc.index[0]) if not vc.empty else "—"
+            top_cnt = int(vc.iloc[0]) if not vc.empty else 0
+            cnt = int(s.shape[0])
+            freq_pct = round((top_cnt / max(cnt, 1)) * 100, 1)
+            describe_categorical.append({
+                "column": str(col_name),
+                "count": cnt,
+                "unique": int(s.nunique()),
+                "top": top_val,
+                "freq": top_cnt,
+                "freq_pct": freq_pct,
+            })
+
+    return {
+        "column_profiles": column_profiles,
+        "describe_numerical": describe_numerical,
+        "describe_categorical": describe_categorical,
+        "total_cells": total_cells,
+        "missing_cells": total_missing_cells,
+        "missing_cell_pct": missing_cell_pct,
+        "data_quality_score": quality_score,
+        "numerical_columns_count": len(describe_numerical),
+        "categorical_columns_count": len(describe_categorical),
+    }
+
+
 def _build_pipeline_result(
     job_id: str,
     file_path: str,
@@ -219,7 +326,7 @@ def _build_pipeline_result(
 ) -> dict[str, Any]:
     _emit_progress(progress_callback, 2, "Loading dataset")
     original_df = load_dataset(file_path)
-    data_preview = original_df.head(5).to_dict(orient="records")
+    data_preview = original_df.head(50).to_dict(orient="records")
 
     # For large datasets (e.g. adult.csv with 48k rows), downsample to 10,000 rows
     # to guarantee fast training under 15s and prevent cloud memory limits.
@@ -501,6 +608,13 @@ def _build_pipeline_result(
     feature_importance = _build_feature_importance_report(trained_models, selected_feature_names)
 
     best_metric_value = best_model_summary.get(primary_metric)
+
+    orig_target_name = str(target_column)
+    for c in original_df.columns:
+        if str(c).strip().lower().replace(" ", "_") == str(target_column).strip().lower().replace(" ", "_") or str(c).strip().lower() == str(target_column).strip().lower():
+            orig_target_name = str(c)
+            break
+
     dashboard_summary = {
         "problem_type": problem_type.title(),
         "rows": int(original_df.shape[0]),
@@ -509,6 +623,7 @@ def _build_pipeline_result(
         "best_model": best_model_name,
         "best_metric_label": primary_metric,
         "best_metric_value": _safe_float(best_metric_value),
+        "target_column": orig_target_name,
     }
 
     # Exploratory Data Analysis (EDA) summary
@@ -547,6 +662,15 @@ def _build_pipeline_result(
 
     _emit_progress(progress_callback, 100, "Pipeline completed")
 
+    dataset_profile = _build_dataset_profile(
+        original_df=original_df,
+        target_column=target_column,
+        dropped_columns=dropped_columns,
+        dropped_column_reasons=dropped_column_reasons,
+        problem_type=problem_type,
+        duplicate_rows=duplicate_rows,
+    )
+
     return {
         "job_id": job_id,
         "problem_type": problem_type,
@@ -555,16 +679,25 @@ def _build_pipeline_result(
         "primary_metric": primary_metric,
         "leaderboard_metrics": leaderboard_metrics,
         "dataset": {
+            "target_column": orig_target_name,
             "rows": int(original_df.shape[0]),
             "columns": int(original_df.shape[1]),
             "original_shape": dataset_shape(original_df),
             "missing_values": _to_serializable(missing_values(original_df)),
             "missing_values_total": int(original_df.isna().sum().sum()),
+            "missing_cell_pct": dataset_profile["missing_cell_pct"],
+            "data_quality_score": dataset_profile["data_quality_score"],
+            "total_cells": dataset_profile["total_cells"],
+            "numerical_columns_count": dataset_profile["numerical_columns_count"],
+            "categorical_columns_count": dataset_profile["categorical_columns_count"],
             "column_names": df.columns.tolist(),
             "dropped_columns": dropped_columns,
             "dropped_column_reasons": dropped_column_reasons,
             "duplicate_rows_removed": int(duplicate_rows),
             "preview": _to_serializable(data_preview),
+            "column_profiles": _to_serializable(dataset_profile["column_profiles"]),
+            "describe_numerical": _to_serializable(dataset_profile["describe_numerical"]),
+            "describe_categorical": _to_serializable(dataset_profile["describe_categorical"]),
             "correlation_pairs": correlation_pairs,
         },
         "preprocessing": {
@@ -580,13 +713,14 @@ def _build_pipeline_result(
         "best_model": best_model_summary,
         "best_model_name": best_model_name,
         "best_model_object": best_model_object,
+        "trained_model_objects": trained_models,
         "feature_names": input_feature_names,
         "selected_feature_names": selected_feature_names,
         "feature_schema": _to_serializable(feature_schema),
         "scaling_params": _to_serializable(scaling_params),
         "feature_importance": feature_importance,
         "dashboard_summary": dashboard_summary,
-        "target_column": target_column,
+        "target_column": orig_target_name,
         "target_label_mapping": target_mapping,
         "tuning_summary": _to_serializable(tuning_summary),
     }
