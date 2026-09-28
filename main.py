@@ -356,6 +356,149 @@ HTML = """
       table { min-width: 500px; }
       thead th, tbody td { padding: 8px 10px; font-size: .78rem; }
     }
+    .deck {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .deck-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .deck-card.open {
+      border-color: rgba(105, 87, 245, 0.4);
+    }
+    .deck-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 22px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--panel-bg);
+      border-bottom: 1px solid transparent;
+      transition: background .2s ease;
+      gap: 12px;
+    }
+    .deck-card.open .deck-header {
+      border-bottom: 1px solid var(--line);
+    }
+    .deck-header:hover {
+      background: rgba(105, 87, 245, 0.05);
+    }
+    .deck-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .deck-icon-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      background: var(--pill-bg);
+      border: 1px solid var(--pill-border);
+      flex-shrink: 0;
+    }
+    .deck-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .deck-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .deck-meta-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .deck-badge {
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--pill-bg);
+      color: var(--primary);
+      border: 1px solid var(--pill-border);
+      white-space: nowrap;
+    }
+    .deck-badge.success {
+      background: rgba(29, 191, 115, 0.1);
+      color: #0f8d56;
+      border-color: rgba(29, 191, 115, 0.25);
+    }
+    .deck-badge.muted {
+      background: rgba(110, 122, 166, 0.08);
+      color: var(--muted);
+      border-color: var(--line);
+    }
+    .deck-chevron {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--card-solid);
+      border: 1px solid var(--line);
+      font-size: 0.75rem;
+      color: var(--muted);
+      transition: transform .25s ease;
+    }
+    .deck-card.open .deck-chevron {
+      transform: rotate(180deg);
+      color: var(--primary);
+    }
+    .deck-body {
+      display: none;
+      padding: 22px;
+      animation: deckFade .22s ease-in-out;
+    }
+    .deck-card.open .deck-body {
+      display: block;
+    }
+    @keyframes deckFade {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .empty-state {
+      background: var(--card);
+      border: 1px dashed var(--line);
+      border-radius: 20px;
+      padding: 40px 20px;
+      text-align: center;
+      margin-top: 6px;
+    }
+    .empty-state h3 { margin: 8px 0 4px; font-size: 1.15rem; font-weight: 800; color: var(--text); }
+    .empty-state p { color: var(--muted); font-size: .88rem; max-width: 440px; margin: 0 auto; line-height: 1.5; }
+    @media (max-width: 640px) {
+      .deck-header { padding: 13px 14px; }
+      .deck-icon-badge { width: 32px; height: 32px; font-size: 1.1rem; }
+      .deck-title { font-size: 1rem; }
+      .deck-subtitle { display: none; }
+      .deck-body { padding: 14px 12px; }
+    }
     .footer {
       margin-top: 40px;
       padding: 24px 16px 14px;
@@ -375,149 +518,252 @@ HTML = """
     <header class="topbar">
       <div class="brand">AutoML Studio</div>
       <nav id="topNav">
-        <button class="nav-btn active" type="button" onclick="navigateTo('upload', this)">Upload</button>
-        <button class="nav-btn" type="button" onclick="navigateTo('results', this)">Results</button>
-        <button class="nav-btn" type="button" onclick="navigateTo('predict', this)">Predict</button>
-        <button class="nav-btn" type="button" onclick="navigateTo('details', this)">Details</button>
+        <button class="nav-btn active" type="button" onclick="navigateTo('card1', this)">Dataset</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('card2', this)">Leaderboard</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('card3', this)">Insights</button>
+        <button class="nav-btn" type="button" onclick="navigateTo('card4', this)">Predict</button>
       </nav>
       <button id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle Dark/Light Mode" style="border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:7px 12px; border-radius:10px; font-weight:700; font-size:.82rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:.2s ease; white-space:nowrap;">
         <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
       </button>
     </header>
 
-    <section class="hero" id="uploadSection">
-      <div>
-        <span class="tag">Python AutoML Pipeline</span>
-        <h1>Train smarter. Predict faster.</h1>
-        <div class="lead">Upload a dataset, auto-train multiple models, then predict instantly using the saved artifact.</div>
-        <div class="pills">
-          <div class="pill">Progress tracking</div>
-          <div class="pill">Model download</div>
-          <div class="pill">Saved model</div>
-          <div class="pill">Instant prediction</div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>Dataset file</h3>
-        <div class="field">
-          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; max-width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:.88rem; cursor:pointer;" />
-          <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-            <span style="font-size:.78rem; font-weight:700; color:var(--muted);">Try demo:</span>
-            <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">Titanic Survival</button>
-          </div>
-          <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:var(--pill-bg); display:none;"></div>
-        </div>
-        <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
-
-        <div class="field">
-          <label class="label" for="target">Target column</label>
-          <select id="target"></select>
-        </div>
-
-        <button class="primary-btn" type="button" id="trainBtn">Run AutoML Pipeline</button>
-        <div class="status" id="statusBox">Pipeline completed successfully. <span id="statusPct">100%</span></div>
-        <div class="progress"><span id="progressBar"></span></div>
-      </div>
-    </section>
-
-    <section class="metrics" id="metrics"></section>
-
-    <section class="results" id="results">
-      <div class="section">
-        <h4>Dataset preview</h4>
-        <h2>First five rows</h2>
-        <div class="preview-wrap"><table id="previewTable"></table></div>
-      </div>
-
-      <div class="section" id="edaSection" style="display:none;">
-        <h4>Exploratory Data Analysis</h4>
-        <h2>Dataset Insights & Target Distribution</h2>
-        <div class="results-columns" style="margin-top:10px;">
-          <div class="results-col">
-            <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
-              <h4 style="margin:0 0 8px; color:var(--primary);">🎯 Target Class Distribution</h4>
-              <div id="targetDistChart"></div>
+    <div class="deck">
+      <!-- CARD 1: DATASET & TRAINING -->
+      <div class="deck-card open" id="card1">
+        <div class="deck-header" onclick="toggleCard('card1')">
+          <div class="deck-title-group">
+            <span class="deck-icon-badge">📂</span>
+            <div>
+              <h2 class="deck-title">1. Dataset & AutoML Pipeline</h2>
+              <div class="deck-subtitle">Upload dataset, configure target column, and start automated training</div>
             </div>
           </div>
-          <div class="results-col">
-            <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
-              <h4 style="margin:0 0 8px; color:var(--primary);">🩺 Data Health & Missing Values</h4>
-              <div id="missingDistChart"></div>
+          <div class="deck-meta-group">
+            <span class="deck-badge" id="card1Badge">Ready</span>
+            <span class="deck-chevron">▼</span>
+          </div>
+        </div>
+        <div class="deck-body">
+          <section class="hero" id="uploadSection" style="margin-top:0;">
+            <div>
+              <span class="tag">Python AutoML Pipeline</span>
+              <h1>Train smarter. Predict faster.</h1>
+              <div class="lead">Upload a dataset, auto-train multiple models, then predict instantly using the saved artifact.</div>
+              <div class="pills">
+                <div class="pill">Progress tracking</div>
+                <div class="pill">Model download</div>
+                <div class="pill">Saved model</div>
+                <div class="pill">Instant prediction</div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Dataset file</h3>
+              <div class="field">
+                <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; max-width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:.88rem; cursor:pointer;" />
+                <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                  <span style="font-size:.78rem; font-weight:700; color:var(--muted);">Try demo:</span>
+                  <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">Titanic Survival</button>
+                </div>
+                <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:var(--pill-bg); display:none;"></div>
+              </div>
+              <div class="tiny" id="fileMeta">Maximum file size: 20 MB · CSV, Excel or JSON</div>
+
+              <div class="field">
+                <label class="label" for="target">Target column</label>
+                <select id="target"></select>
+              </div>
+
+              <button class="primary-btn" type="button" id="trainBtn">Run AutoML Pipeline</button>
+              <div class="status" id="statusBox">Pipeline completed successfully. <span id="statusPct">100%</span></div>
+              <div class="progress"><span id="progressBar"></span></div>
+            </div>
+          </section>
+
+          <div class="section" id="previewSection" style="margin-top:18px; display:none;">
+            <h4>Dataset preview</h4>
+            <h2>First five rows</h2>
+            <div class="preview-wrap"><table id="previewTable"></table></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 2: RESULTS & LEADERBOARD -->
+      <div class="deck-card" id="card2">
+        <div class="deck-header" onclick="toggleCard('card2')">
+          <div class="deck-title-group">
+            <span class="deck-icon-badge">🏆</span>
+            <div>
+              <h2 class="deck-title">2. Model Leaderboard & Comparisons</h2>
+              <div class="deck-subtitle">Evaluation metrics (PR-AUC, ROC-AUC, F1), rankings, and export</div>
             </div>
           </div>
+          <div class="deck-meta-group">
+            <span class="deck-badge muted" id="card2Badge">Waiting for training</span>
+            <span class="deck-chevron">▼</span>
+          </div>
+        </div>
+        <div class="deck-body">
+          <div id="resultsContent" style="display:none;">
+            <section class="metrics" id="metrics" style="margin-top:0;"></section>
+
+            <div class="section" style="margin-top:18px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                  <h4>Comprehensive evaluation</h4>
+                  <h2 style="margin:0;">All Models Performance Leaderboard</h2>
+                </div>
+                <button type="button" onclick="exportLeaderboardCSV()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.82rem; font-weight:700; padding:6px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;" title="Export table data to CSV file">
+                  📥 Export CSV
+                </button>
+              </div>
+              <div class="tiny" style="margin:8px 0 10px;">Detailed comparison of all trained machine learning models across evaluation metrics (including Accuracy, F1, ROC-AUC, and PR-AUC).</div>
+              <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
+            </div>
+
+            <div class="section" style="margin-top:18px;">
+              <h4>Model comparison</h4>
+              <h2>Top 3 model comparison</h2>
+              <div class="bar-list" id="comparisonBars"></div>
+            </div>
+
+            <div class="section" id="downloadSection" style="margin:14px 0 0; padding:14px 18px; background:linear-gradient(135deg, rgba(105,87,245,0.06), rgba(142,123,255,0.1)); border:1px solid var(--line); border-radius:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+              <div>
+                <div style="font-weight:800; font-size:.95rem; color:var(--text); display:flex; align-items:center; gap:6px;">
+                  <span>📦</span> <strong>Export Best Model</strong>
+                </div>
+                <div style="font-size:.8rem; color:var(--muted); margin-top:2px;">Download serialized Python pickle (<code style="font-size:.78rem; background:var(--code-bg); padding:1px 5px; border-radius:4px;">.pkl</code>) for offline inference.</div>
+              </div>
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <button type="button" onclick="navigateTo('card4')" class="nav-btn" style="background:var(--pill-bg); color:var(--primary); font-size:.85rem; font-weight:700; padding:8px 16px; border-radius:10px; cursor:pointer;">
+                  🎯 Test Predictions &rarr;
+                </button>
+                <a href="/api/download-model" class="primary-btn" style="width:auto; margin:0; text-decoration:none; padding:9px 18px; font-size:.88rem; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; white-space:nowrap;">
+                  📥 Download Model (.pkl)
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div id="resultsEmpty" class="empty-state">
+            <div style="font-size:2.8rem; margin-bottom:8px;">🏆</div>
+            <h3>No Models Trained Yet</h3>
+            <p>Upload a dataset and click <strong>Run AutoML Pipeline</strong> in Section 1 to view model comparisons and leaderboard rankings.</p>
+            <button type="button" class="primary-btn" onclick="navigateTo('card1')" style="width:auto; padding:10px 24px; font-size:.92rem; margin-top:14px; display:inline-block;">🚀 Go to Dataset & Train</button>
+          </div>
         </div>
       </div>
 
-      <div class="results-columns" id="detailsSection">
-        <div class="results-col">
-          <div class="section">
-            <h4>Model comparison</h4>
-            <h2>Top 3 model comparison</h2>
-            <div class="bar-list" id="comparisonBars"></div>
+      <!-- CARD 3: DETAILS & EDA -->
+      <div class="deck-card" id="card3">
+        <div class="deck-header" onclick="toggleCard('card3')">
+          <div class="deck-title-group">
+            <span class="deck-icon-badge">📊</span>
+            <div>
+              <h2 class="deck-title">3. Insights & Exploratory Data Analysis</h2>
+              <div class="deck-subtitle">Feature importances, target distributions, data health & tuning logs</div>
+            </div>
           </div>
-          <div class="section">
-            <h4>Model interpretability</h4>
-            <h2>Feature importance highlights</h2>
-            <div id="importanceBox"></div>
+          <div class="deck-meta-group">
+            <span class="deck-badge muted" id="card3Badge">Insights ready after train</span>
+            <span class="deck-chevron">▼</span>
           </div>
         </div>
+        <div class="deck-body">
+          <div id="detailsContent" style="display:none;">
+            <div class="section" id="edaSection" style="display:none; margin-bottom:16px;">
+              <h4>Exploratory Data Analysis</h4>
+              <h2>Dataset Insights & Target Distribution</h2>
+              <div class="results-columns" style="margin-top:10px;">
+                <div class="results-col">
+                  <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
+                    <h4 style="margin:0 0 8px; color:var(--primary);">🎯 Target Class Distribution</h4>
+                    <div id="targetDistChart"></div>
+                  </div>
+                </div>
+                <div class="results-col">
+                  <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px;">
+                    <h4 style="margin:0 0 8px; color:var(--primary);">🩺 Data Health & Missing Values</h4>
+                    <div id="missingDistChart"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <div class="results-col">
-          <div class="section">
-            <h4>Pipeline steps</h4>
-            <h2>Data preprocessing summary</h2>
-            <div class="accordion" id="prepAccordion"></div>
+            <div class="results-columns" id="detailsSection">
+              <div class="results-col">
+                <div class="section">
+                  <h4>Model interpretability</h4>
+                  <h2>Feature importance highlights</h2>
+                  <div id="importanceBox"></div>
+                </div>
+              </div>
+
+              <div class="results-col">
+                <div class="section">
+                  <h4>Pipeline steps</h4>
+                  <h2>Data preprocessing summary</h2>
+                  <div class="accordion" id="prepAccordion"></div>
+                </div>
+                <div class="section" style="margin-top:14px;">
+                  <h4>Hyperparameter tuning</h4>
+                  <h2>Best tuned models</h2>
+                  <div id="tuningBox"></div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="section">
-            <h4>Hyperparameter tuning</h4>
-            <h2>Best tuned models</h2>
-            <div id="tuningBox"></div>
+
+          <div id="detailsEmpty" class="empty-state">
+            <div style="font-size:2.8rem; margin-bottom:8px;">🔍</div>
+            <h3>No Details Available</h3>
+            <p>Run the AutoML pipeline to inspect EDA visualizations, feature importance rankings, and hyperparameter tuning logs.</p>
+            <button type="button" class="primary-btn" onclick="navigateTo('card1')" style="width:auto; padding:10px 24px; font-size:.92rem; margin-top:14px; display:inline-block;">🚀 Go to Dataset & Train</button>
           </div>
         </div>
       </div>
 
-      <div class="section">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div>
-            <h4>Comprehensive evaluation</h4>
-            <h2 style="margin:0;">All Models Performance Leaderboard</h2>
+      <!-- CARD 4: PREDICT -->
+      <div class="deck-card" id="card4">
+        <div class="deck-header" onclick="toggleCard('card4')">
+          <div class="deck-title-group">
+            <span class="deck-icon-badge">🎯</span>
+            <div>
+              <h2 class="deck-title">4. Live Model Predictions</h2>
+              <div class="deck-subtitle">Test trained model with instant interactive inputs & class probabilities</div>
+            </div>
           </div>
-          <button type="button" onclick="exportLeaderboardCSV()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.82rem; font-weight:700; padding:6px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;" title="Export table data to CSV file">
-            📥 Export CSV
-          </button>
-        </div>
-        <div class="tiny" style="margin:8px 0 10px;">Detailed comparison of all trained machine learning models across evaluation metrics.</div>
-        <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
-      </div>
-
-      <div class="section" id="downloadSection" style="margin:14px 0 0; padding:14px 18px; background:linear-gradient(135deg, rgba(105,87,245,0.06), rgba(142,123,255,0.1)); border:1px solid var(--line); border-radius:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-        <div>
-          <div style="font-weight:800; font-size:.95rem; color:var(--text); display:flex; align-items:center; gap:6px;">
-            <span>📦</span> <strong>Export Best Model</strong>
+          <div class="deck-meta-group">
+            <span class="deck-badge muted" id="card4Badge">Model not loaded</span>
+            <span class="deck-chevron">▼</span>
           </div>
-          <div style="font-size:.8rem; color:var(--muted); margin-top:2px;">Download serialized Python pickle (<code style="font-size:.78rem; background:var(--code-bg); padding:1px 5px; border-radius:4px;">.pkl</code>) for offline inference.</div>
         </div>
-        <a href="/api/download-model" class="primary-btn" style="width:auto; margin:0; text-decoration:none; padding:9px 18px; font-size:.88rem; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; white-space:nowrap;">
-          📥 Download Model (.pkl)
-        </a>
-      </div>
-    </section>
+        <div class="deck-body">
+          <form id="featureForm" style="display:none; margin-top:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+              <div>
+                <h3 style="margin:0;">Instant Model Prediction</h3>
+                <div class="tiny" style="margin-top:4px;">Test your trained model immediately with new feature inputs.</div>
+              </div>
+              <button type="button" onclick="autofillSampleValues()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.85rem; font-weight:700; padding:7px 14px; cursor:pointer;" title="Fill input fields with sample values from the dataset">
+                🎲 Autofill Sample Values
+              </button>
+            </div>
+            <div class="grid" id="featureGrid"></div>
+            <button class="primary-btn" id="predictBtn" type="submit">Predict</button>
+            <div id="predictionResult" style="display:none; margin-top:16px; padding:16px 20px; border-radius:14px; border:1px solid var(--line); background:var(--card); text-align:center;"></div>
+          </form>
 
-    <form id="featureForm">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-        <div>
-          <h3 style="margin:0;">Instant Model Prediction</h3>
-          <div class="tiny" style="margin-top:4px;">Test your trained model immediately with new feature inputs.</div>
+          <div id="predictEmpty" class="empty-state">
+            <div style="font-size:2.8rem; margin-bottom:8px;">🎯</div>
+            <h3>Predictor Not Ready</h3>
+            <p>Please train a model first in Section 1. Once trained, your model will be loaded here for live predictions.</p>
+            <button type="button" class="primary-btn" onclick="navigateTo('card1')" style="width:auto; padding:10px 24px; font-size:.92rem; margin-top:14px; display:inline-block;">🚀 Go to Dataset & Train</button>
+          </div>
         </div>
-        <button type="button" onclick="autofillSampleValues()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.85rem; font-weight:700; padding:7px 14px; cursor:pointer;" title="Fill input fields with sample values from the dataset">
-          Autofill Sample Values
-        </button>
       </div>
-      <div class="grid" id="featureGrid"></div>
-      <button class="primary-btn" id="predictBtn" type="submit">Predict</button>
-      <div id="predictionResult" style="display:none; margin-top:16px; padding:16px 20px; border-radius:14px; border:1px solid var(--line); background:var(--card); text-align:center;"></div>
-    </form>
+    </div>
 
     <footer class="footer">
       <div>Made by <strong>N Samuel Reddy</strong></div>
@@ -613,80 +859,66 @@ HTML = """
       }
     }
 
-    function navigateTo(target, btn) {
-      document.querySelectorAll('#topNav .nav-btn').forEach(b => b.classList.remove('active'));
-      if (btn) btn.classList.add('active');
-
-      if (target === 'upload') {
-        const el = document.getElementById('uploadSection') || document.querySelector('.hero');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-        return;
+    function toggleCard(cardId, forceOpen) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const isCurrentlyOpen = card.classList.contains('open');
+      const shouldOpen = (forceOpen !== undefined) ? forceOpen : !isCurrentlyOpen;
+      if (shouldOpen) {
+        card.classList.add('open');
+      } else {
+        card.classList.remove('open');
       }
+      updateNavHighlight();
+    }
 
-      const resBox = document.getElementById('results');
-      const isReady = resBox && resBox.classList.contains('show');
-
-      if (target === 'results') {
-        if (!isReady) {
-          alert('Please run the AutoML pipeline first to view results.');
-          const el = document.getElementById('uploadSection');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-          return;
+    function openCard(cardId, scroll) {
+      toggleCard(cardId, true);
+      if (scroll) {
+        const card = document.getElementById(cardId);
+        if (card) {
+          setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 80);
         }
-        const el = document.getElementById('metrics') || resBox;
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      } else if (target === 'predict') {
-        const form = document.getElementById('featureForm');
-        if (!isReady || !form || form.style.display !== 'block') {
-          alert('Please run the AutoML pipeline first to train a model and enable predictions.');
-          const el = document.getElementById('uploadSection');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-          return;
-        }
-        form.scrollIntoView({ behavior: 'smooth' });
-      } else if (target === 'details') {
-        if (!isReady) {
-          alert('Please run the AutoML pipeline first to view model and preprocessing details.');
-          const el = document.getElementById('uploadSection');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-          return;
-        }
-        const el = document.getElementById('detailsSection') || document.getElementById('prepAccordion');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
       }
     }
 
-    window.addEventListener('scroll', () => {
-      const scrollPos = window.scrollY + 140;
-      const resBox = document.getElementById('results');
-      const isReady = resBox && resBox.classList.contains('show');
-      if (!isReady) return;
-
-      const form = document.getElementById('featureForm');
-      const details = document.getElementById('detailsSection');
-      const results = document.getElementById('metrics');
-      const upload = document.getElementById('uploadSection');
-
-      let current = 'upload';
-      if (form && form.style.display === 'block' && scrollPos >= form.offsetTop) {
-        current = 'predict';
-      } else if (details && scrollPos >= details.offsetTop) {
-        current = 'details';
-      } else if (results && scrollPos >= results.offsetTop) {
-        current = 'results';
-      } else if (upload && scrollPos >= upload.offsetTop) {
-        current = 'upload';
+    function updateNavHighlight() {
+      const navBtns = document.querySelectorAll('#topNav .nav-btn');
+      const cards = ['card1', 'card2', 'card3', 'card4'];
+      let activeCard = null;
+      for (const cid of cards) {
+        const el = document.getElementById(cid);
+        if (el && el.classList.contains('open')) {
+          activeCard = cid;
+          break;
+        }
       }
-
-      document.querySelectorAll('#topNav .nav-btn').forEach(btn => {
+      navBtns.forEach((btn) => {
         const onclickAttr = btn.getAttribute('onclick') || '';
-        if (onclickAttr.indexOf("'" + current + "'") !== -1) {
+        if (activeCard && onclickAttr.indexOf("'" + activeCard + "'") !== -1) {
           btn.classList.add('active');
         } else {
           btn.classList.remove('active');
         }
       });
-    });
+    }
+
+    function navigateTo(target, btnEl) {
+      const map = {
+        'upload': 'card1', 'card1': 'card1',
+        'results': 'card2', 'card2': 'card2',
+        'insights': 'card3', 'card3': 'card3', 'details': 'card3',
+        'predict': 'card4', 'card4': 'card4'
+      };
+      const cardId = map[target] || 'card1';
+      openCard(cardId, true);
+      if (btnEl) {
+        document.querySelectorAll('#topNav .nav-btn').forEach(b => b.classList.remove('active'));
+        btnEl.classList.add('active');
+      }
+    }
 
     const state = { result: null, file: null };
 
@@ -942,6 +1174,9 @@ HTML = """
       statusBox.innerHTML = 'Starting pipeline...';
       progressBar.style.width = '4%';
 
+      const b1 = document.getElementById('card1Badge');
+      if (b1) { b1.textContent = 'Training...'; b1.className = 'deck-badge'; }
+
       const es = new EventSource(`/api/train-stream?file_id=${encodeURIComponent(fileId)}&target=${encodeURIComponent(targetInput.value || '')}`);
       es.addEventListener('progress', (e) => {
         try {
@@ -965,7 +1200,20 @@ HTML = """
           statusBox.style.background = 'rgba(29,191,115,0.1)';
           statusBox.style.color = '#0f8d56';
           progressBar.style.width = '100%';
-          document.getElementById('topNav').style.display = 'flex';
+
+          const b1 = document.getElementById('card1Badge');
+          if (b1) { b1.textContent = 'Completed ✓'; b1.className = 'deck-badge success'; }
+          const b2 = document.getElementById('card2Badge');
+          if (b2) { b2.textContent = 'Leaderboard Ready ✓'; b2.className = 'deck-badge success'; }
+          const b3 = document.getElementById('card3Badge');
+          if (b3) { b3.textContent = 'Insights Ready ✓'; b3.className = 'deck-badge success'; }
+          const b4 = document.getElementById('card4Badge');
+          if (b4) { b4.textContent = 'Predictor Active ✓'; b4.className = 'deck-badge success'; }
+
+          setTimeout(() => {
+            toggleCard('card1', false);
+            openCard('card2', true);
+          }, 450);
         } catch (err) {
           console.error('Bad result event', err);
         }
@@ -973,6 +1221,8 @@ HTML = """
       es.addEventListener('error', (e) => {
         es.close();
         if (state.result) return;
+        const b1 = document.getElementById('card1Badge');
+        if (b1) { b1.textContent = 'Failed ❌'; b1.className = 'deck-badge'; }
         let msg = 'Pipeline failed or disconnected.';
         try {
           if (e.data) {
@@ -1047,7 +1297,19 @@ HTML = """
     }
 
     function renderResults(payload) {
-      results.classList.add('show');
+      const rc = document.getElementById('resultsContent');
+      if (rc) rc.style.display = 'block';
+      const re = document.getElementById('resultsEmpty');
+      if (re) re.style.display = 'none';
+
+      const pe = document.getElementById('predictEmpty');
+      if (pe) pe.style.display = 'none';
+
+      const dc = document.getElementById('detailsContent');
+      if (dc) dc.style.display = 'block';
+      const de = document.getElementById('detailsEmpty');
+      if (de) de.style.display = 'none';
+
       const preprocessing = payload.preprocessing || {};
       const droppedReasons = payload.dataset?.dropped_column_reasons || {};
       prepAccordion.innerHTML = [
@@ -1196,7 +1458,9 @@ HTML = """
     }
 
     function renderPreview(rows) {
-      if (!rows.length) {
+      const ps = document.getElementById('previewSection');
+      if (ps) ps.style.display = (rows && rows.length) ? 'block' : 'none';
+      if (!rows || !rows.length) {
         previewTable.innerHTML = '<tbody><tr><td class="tiny">No preview available.</td></tr></tbody>';
         return;
       }

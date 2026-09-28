@@ -14,7 +14,8 @@ def compare_models(evaluation_report):
             "Precision": metrics["Precision"],
             "Recall": metrics["Recall"],
             "F1 Score": metrics["F1 Score"],
-            "ROC-AUC": metrics["ROC-AUC"]
+            "ROC-AUC": metrics["ROC-AUC"],
+            "PR-AUC": metrics.get("PR-AUC", "Not Supported")
 
         })
 

@@ -480,7 +480,7 @@ def _build_pipeline_result(
         comparison = compare_models(evaluation_report)
         top3 = top_models(comparison, top_n=3)
         best = best_model(comparison)
-        metric_options = ["Accuracy", "Precision", "Recall", "F1 Score", "ROC-AUC"]
+        metric_options = ["Accuracy", "Precision", "Recall", "F1 Score", "ROC-AUC", "PR-AUC"]
         primary_metric = "Accuracy"
         leaderboard_metrics = ["Accuracy", "F1 Score"]
     else:

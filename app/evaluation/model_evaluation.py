@@ -6,9 +6,11 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     roc_auc_score,
+    average_precision_score,
     confusion_matrix,
     classification_report
 )
+from sklearn.preprocessing import label_binarize
 
 
 def evaluate_models(
@@ -25,16 +27,21 @@ def evaluate_models(
         y_pred = predictions[name]
 
         roc_auc = "Not Supported"
+        pr_auc = "Not Supported"
         if hasattr(model, "predict_proba"):
             try:
                 proba = model.predict_proba(X_test)
-                unique_classes = set(y_test)
+                unique_classes = sorted(list(set(y_test)))
                 if len(unique_classes) == 2:
                     roc_auc = float(roc_auc_score(y_test, proba[:, 1]))
+                    pr_auc = float(average_precision_score(y_test, proba[:, 1]))
                 elif len(unique_classes) > 2:
                     roc_auc = float(roc_auc_score(y_test, proba, multi_class="ovr", average="weighted"))
+                    y_bin = label_binarize(y_test, classes=unique_classes)
+                    pr_auc = float(average_precision_score(y_bin, proba, average="weighted"))
             except Exception:
                 roc_auc = "Not Supported"
+                pr_auc = "Not Supported"
 
         report[name] = {
 
@@ -62,6 +69,8 @@ def evaluate_models(
             ),
 
             "ROC-AUC": roc_auc,
+
+            "PR-AUC": pr_auc,
 
             "Confusion Matrix": confusion_matrix(
                 y_test,
