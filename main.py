@@ -374,7 +374,7 @@ HTML = """
           <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.json,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--input-bg); color:var(--text); font-size:1rem; cursor:pointer;" />
           <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
             <span style="font-size:.78rem; font-weight:700; color:var(--muted);">Try demo:</span>
-            <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">🚢 Titanic Survival</button>
+            <button type="button" class="pill" onclick="loadDemo('titanic')" style="cursor:pointer; border:1px solid var(--line); font-size:.75rem; padding:4px 10px; background:var(--card);">Titanic Survival</button>
           </div>
           <div id="fileNotice" style="margin-top:8px; padding:10px 14px; border-radius:10px; font-size:.9rem; font-weight:700; background:var(--pill-bg); display:none;"></div>
         </div>
