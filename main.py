@@ -626,13 +626,21 @@ HTML = """
       }
     }
 
-    function showScreen(screenId) {
+    function showScreen(screenId, pushToHistory = true) {
+      const shouldPush = (typeof pushToHistory === 'boolean') ? pushToHistory : true;
       if (screenId === 'hub' && (!state.result || !state.result.comparison)) screenId = 'upload';
-      ['upload', 'hub', 'leaderboard', 'insights', 'predict', 'dataset'].forEach(s => byId('screen-' + s)?.classList.toggle('active', s === screenId));
+      const screens = ['upload', 'hub', 'leaderboard', 'insights', 'predict', 'dataset'];
+      if (!screens.includes(screenId)) screenId = state.result ? 'hub' : 'upload';
+
+      screens.forEach(s => byId('screen-' + s)?.classList.toggle('active', s === screenId));
       const navMap = { upload: 'navHub', hub: 'navHub', leaderboard: 'navLeaderboard', insights: 'navInsights', predict: 'navPredict', dataset: 'navDataset' };
       const activeNavId = navMap[screenId] || 'navHub';
       document.querySelectorAll('#topNav .nav-btn').forEach(btn => btn.classList.toggle('active', btn.id === activeNavId));
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      if (shouldPush && window.history && location.hash !== '#' + screenId) {
+        history.pushState({ screen: screenId }, '', '#' + screenId);
+      }
     }
 
     function navigateTo(target) {
@@ -1159,6 +1167,16 @@ HTML = """
       featureForm.style.display = 'block';
       predictBtn.style.display = 'block';
     }
+    // Browser back button & mobile swipe gesture navigation support
+    window.addEventListener('popstate', (e) => {
+      const scr = e.state?.screen || (location.hash ? location.hash.replace('#', '') : (state.result ? 'hub' : 'upload'));
+      showScreen(scr, false);
+    });
+    const initHash = location.hash ? location.hash.replace('#', '') : 'upload';
+    if (!history.state) {
+      history.replaceState({ screen: initHash }, '', '#' + initHash);
+    }
+
     // Auto-load Titanic demo on initial visit if no file is selected yet
     window.addEventListener('DOMContentLoaded', () => {
       if (!state.file_id) {
