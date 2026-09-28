@@ -24,6 +24,18 @@ def evaluate_models(
 
         y_pred = predictions[name]
 
+        roc_auc = "Not Supported"
+        if hasattr(model, "predict_proba"):
+            try:
+                proba = model.predict_proba(X_test)
+                unique_classes = set(y_test)
+                if len(unique_classes) == 2:
+                    roc_auc = float(roc_auc_score(y_test, proba[:, 1]))
+                elif len(unique_classes) > 2:
+                    roc_auc = float(roc_auc_score(y_test, proba, multi_class="ovr", average="weighted"))
+            except Exception:
+                roc_auc = "Not Supported"
+
         report[name] = {
 
             "Accuracy": accuracy_score(y_test, y_pred),
@@ -49,14 +61,7 @@ def evaluate_models(
                 zero_division=0
             ),
 
-            "ROC-AUC": (
-                roc_auc_score(
-                    y_test,
-                    model.predict_proba(X_test)[:, 1]
-                )
-                if hasattr(model, "predict_proba")
-                else "Not Supported"
-            ),
+            "ROC-AUC": roc_auc,
 
             "Confusion Matrix": confusion_matrix(
                 y_test,
