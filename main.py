@@ -221,8 +221,67 @@ HTML = """
     }
     .tune-card .title { font-weight: 800; margin-bottom: 4px; }
     .tune-card .meta { color: var(--muted); font-size: .85rem; line-height: 1.45; }
-    .table-wrap { height: auto; max-height: 260px; overflow:auto; border: 1px solid var(--line); border-radius: 14px; margin-top: 10px; max-width: 100%; }
-    table { width: 100%; min-width: 1100px; border-collapse: collapse; background: var(--table-bg); color: var(--text); table-layout: auto; }
+    .table-wrap, .preview-wrap {
+      width: 100%;
+      max-height: 380px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin-top: 10px;
+      background: var(--card-solid);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+      min-width: 100%;
+      border-collapse: collapse;
+      background: var(--table-bg);
+      color: var(--text);
+      font-size: 0.88rem;
+      text-align: left;
+    }
+    thead th {
+      background: var(--soft);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 0.82rem;
+      padding: 12px 16px;
+      border-bottom: 2px solid var(--line);
+      border-right: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      white-space: nowrap;
+    }
+    thead th:last-child {
+      border-right: none;
+    }
+    tbody td {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      white-space: nowrap;
+      font-size: 0.88rem;
+    }
+    tbody td:last-child {
+      border-right: none;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    tbody tr:nth-child(even) {
+      background: rgba(105, 87, 245, 0.025);
+    }
+    [data-theme="dark"] tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    tbody tr:hover {
+      background: rgba(105, 87, 245, 0.06);
+    }
+    [data-theme="dark"] tbody tr:hover {
+      background: rgba(129, 140, 248, 0.1);
+    }
     #featureForm { display: none; margin-top: 28px; }
     #featureForm .grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 16px; }
     .input-wrap { background: var(--card); border: 1px solid var(--line); padding: 14px; border-radius: 14px; }
@@ -402,12 +461,12 @@ HTML = """
         <div class="table-wrap" style="height:auto; max-height:420px;"><table id="comparisonTable"></table></div>
       </div>
 
-      <div class="section" id="downloadSection" style="margin-top:16px; text-align:center; padding:22px 18px; background:linear-gradient(135deg, rgba(105,87,245,0.08), rgba(142,123,255,0.14)); border:1px solid var(--line); border-radius:16px;">
+      <div class="section" id="downloadSection" style="max-width:760px; margin:16px auto 0; text-align:center; padding:18px 16px; background:linear-gradient(135deg, rgba(105,87,245,0.08), rgba(142,123,255,0.14)); border:1px solid var(--line); border-radius:16px;">
         <h4 style="color:var(--primary); margin:0 0 6px;">Export Trained Model</h4>
         <h2 style="margin:0 0 8px;">Download Model File</h2>
         <p class="tiny" style="margin-bottom:16px;">Export your best trained model as a serialized Python pickle (.pkl) file for local inference.</p>
         <div style="display:flex; justify-content:center;">
-          <a href="/api/download-model" class="primary-btn" style="text-decoration:none; max-width:280px; padding:12px 24px; font-size:.95rem; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+          <a href="/api/download-model" class="primary-btn" style="text-decoration:none; max-width:220px; padding:10px 18px; font-size:.92rem; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
             📥 Download Model (.pkl)
           </a>
         </div>
@@ -421,7 +480,7 @@ HTML = """
           <div class="tiny" style="margin-top:4px;">Test your trained model immediately with new feature inputs.</div>
         </div>
         <button type="button" onclick="autofillSampleValues()" class="nav-btn" style="border:1px solid var(--line); background:var(--card-solid); color:var(--primary); font-size:.85rem; font-weight:700; padding:7px 14px; cursor:pointer;" title="Fill input fields with sample values from the dataset">
-          🎲 Autofill Sample Values
+          Autofill Sample Values
         </button>
       </div>
       <div class="grid" id="featureGrid"></div>
@@ -492,7 +551,7 @@ HTML = """
         fileNotice.style.display = 'block';
         fileNotice.style.background = 'var(--pill-bg)';
         fileNotice.style.color = 'var(--primary)';
-        fileNotice.innerHTML = '⏳ Loading demo dataset...';
+        fileNotice.innerHTML = 'Loading demo dataset...';
       }
       try {
         const res = await fetch('/api/load-demo?name=' + encodeURIComponent(name));
@@ -1352,5 +1411,5 @@ async def download_model():
 
 
 if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=False)
+  import uvicorn
+  uvicorn.run('main:app', host='0.0.0.0', port=int(os.getenv('PORT', 8080)), reload=False)
