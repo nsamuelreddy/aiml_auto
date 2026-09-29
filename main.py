@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.main import _build_pipeline_result, _to_serializable, detect_default_target
@@ -1236,9 +1236,19 @@ HTML = """
 """
 
 
-@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
-def home() -> str:
-    return HTML
+@app.api_route("/", methods=["GET", "HEAD"])
+def home(request: Request):
+    ua = request.headers.get("user-agent", "").lower()
+    if "cron-job" in ua or "uptime" in ua or "pingdom" in ua or "betteruptime" in ua:
+        return PlainTextResponse("OK")
+    return HTMLResponse(content=HTML)
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+@app.api_route("/ping", methods=["GET", "HEAD"])
+def health_check():
+    return PlainTextResponse("OK")
 
 
 ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.json'}
